@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import List
+from Entities.CartItem import CartItem
 from pydantic import BaseModel
 
 
@@ -18,3 +21,10 @@ class CustomerCheckout(BaseModel):
     CardBrand: str
     Installments: int
     InstanceId: str
+
+
+class CheckoutRequest(BaseModel):
+    customerCheckout: CustomerCheckout
+    items: List[CartItem]
+    timestamp: datetime
+    instanceId: str

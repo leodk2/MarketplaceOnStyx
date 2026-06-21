@@ -1,10 +1,12 @@
+from confluent_kafka import TIMESTAMP_CREATE_TIME
+from datetime import datetime
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Cart import Cart
 from Entities.CartItem import CartItem
 from Entities.CartStatus import CartStatus
-from Requests.CustomerCheckout import CustomerCheckout
+from Requests.CustomerCheckout import CustomerCheckout, CheckoutRequest
 import logging
 
 logger = logging.Logger(__name__)
@@ -67,7 +69,15 @@ async def checkout(
     elif cart.Status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent()
 
-    pass
+    checkoutRequest = CheckoutRequest(
+        customerCheckout=customerCheckout,
+        items=cart.Items,
+        timestamp=datetime.now(),
+        instanceId=customerCheckout.InstanceId,
+    )
+    ctx.call_remote_async("order", "CheckouRequest", ctx.key, (checkoutRequest,))
+
+    ctx.call_remote_async("cart", "seal", ctx.key)
 
 
 @cart_operator.register
