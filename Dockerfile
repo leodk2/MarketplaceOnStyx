@@ -16,7 +16,7 @@ RUN pip install --upgrade pip && \
  pip install --user -r /var/local/styx/requirements.txt && \
   pip install --user /var/local/styx-package/
 
-WORKDIR /usr/local/styx/kv-test
+WORKDIR /usr/local/styx/marketplaceonstyx
 
 COPY --chown=styx . .
 

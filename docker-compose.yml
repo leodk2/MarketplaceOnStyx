@@ -109,12 +109,12 @@ services:
   # =========================================
   # KEY/VALUE STORE (this project)
   # =========================================
-  kv-test:
+  marketplace:
     build:
       context: .
       dockerfile: ./Dockerfile
       no_cache: true
-    image: library/styxkvstore-kv-test:latest
+    image: library/marketplaceonstyx:latest
     environment:
       - STYX_HOST=coordinator
       - STYX_PORT=8888
