@@ -1,0 +1,27 @@
+FROM python:3.14.3-slim-trixie
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  g++ \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd -r styx && useradd -rm -d /usr/local/styx -g styx styx
+
+USER styx
+
+ENV PATH="/usr/local/styx/.local/bin:${PATH}"
+ENV PYTHONPATH="/usr/local/styx"
+
+COPY --chown=styx:styx ./requirements.txt /var/local/styx/
+COPY --chown=styx:styx styx-package /var/local/styx-package/
+RUN pip install --upgrade pip && \
+ pip install --user -r /var/local/styx/requirements.txt && \
+  pip install --user /var/local/styx-package/
+
+WORKDIR /usr/local/styx/kv-test
+
+COPY --chown=styx . .
+
+CMD python api.py
+
+EXPOSE 3000
+
+

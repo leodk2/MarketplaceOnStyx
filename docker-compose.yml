@@ -1,0 +1,135 @@
+services:
+  # =========================================
+  # ZOOKEEPER
+  # =========================================
+  zookeeper:
+    # Do not go above 7.4.0 for aiokafka compatibility
+    image: confluentinc/cp-zookeeper:7.4.0
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: [ "CMD", "cub", "zk-ready", "localhost:2181", "10" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # KAFKA
+  # =========================================
+  kafka1:
+    # Do not go above 7.4.0 for aiokafka compatibility
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka1
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_MESSAGE_MAX_BYTES: 134217728 # 128MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 134217728 # 128MB
+      # Single broker: replication/ISR settings must be 1 (upstream defaults to 3 for a 3-broker cluster)
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_ZOOKEEPER_SESSION_TIMEOUT_MS: 6000
+      KAFKA_ZOOKEEPER_CONNECTION_TIMEOUT_MS: 6000
+    healthcheck:
+      test: [ "CMD", "cub", "kafka-ready", "-b", "localhost:9092", "1", "20" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+
+  # =========================================
+  # S3-COMPATIBLE STORAGE (required by the Styx coordinator/worker for snapshots)
+  # =========================================
+  rustfs:
+    image: rustfs/rustfs:latest
+    ports:
+      - "9000:9000"
+    volumes:
+      - rustfs-data:/data
+
+  # =========================================
+  # STYX COORDINATOR
+  # =========================================
+  coordinator:
+    image: ghcr.io/delftdata/styx-coordinator:latest
+    hostname: coordinator
+    ports:
+      - "8888:8888"
+    environment:
+      - KAFKA_URL=kafka1:19092
+      # Single Kafka broker: topic replication factor must be 1 (upstream default is 3)
+      - KAFKA_REPLICATION_FACTOR=1
+      - HEARTBEAT_LIMIT=5000
+      - HEARTBEAT_CHECK_INTERVAL=500
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=rustfsadmin
+      - S3_SECRET_KEY=rustfsadmin
+    depends_on:
+      kafka1:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
+  # =========================================
+  # STYX WORKER
+  # =========================================
+  worker:
+    image: ghcr.io/delftdata/styx-worker:latest
+    environment:
+      - INGRESS_TYPE=KAFKA
+      - KAFKA_URL=kafka1:19092
+      - DISCOVERY_HOST=coordinator
+      - DISCOVERY_PORT=8888
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=rustfsadmin
+      - S3_SECRET_KEY=rustfsadmin
+    depends_on:
+      coordinator:
+        condition: service_started
+      kafka1:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+    deploy:
+      replicas: 1
+
+  # =========================================
+  # KEY/VALUE STORE (this project)
+  # =========================================
+  kv-test:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      no_cache: true
+    image: library/styxkvstore-kv-test:latest
+    environment:
+      - STYX_HOST=coordinator
+      - STYX_PORT=8888
+      - KAFKA_URL=kafka1:19092
+      - PYTHONUNBUFFERED=TRUE
+    ports:
+      - "3000:3000"
+    depends_on:
+      coordinator:
+        condition: service_started
+      worker:
+        condition: service_started
+    # coordinator can take up to ~60s to become ready (S3 connection retry loop),
+    # so restart kv-test if it fails to connect on its first attempt
+    restart: unless-stopped
+
+volumes:
+  rustfs-data:
