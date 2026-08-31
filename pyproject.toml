@@ -8,4 +8,11 @@ dependencies = [
     "pydantic>=2.13.4",
     "sanic>=25.12.1",
     "sanic-ext>=25.12.0",
+    "styx",
 ]
+
+[tool.uv.sources]
+styx = { workspace = true }
+
+[tool.uv.workspace]
+members = ["styx-package"]
