@@ -1,30 +1,49 @@
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List
+
 from Entities.CartItem import CartItem
-from pydantic import BaseModel
+from Entities.ItemStatus import ItemStatus
 
 
-class CustomerCheckout(BaseModel):
-    CustomerId: int
-    FirstName: str
-    LastName: str
-    Street: str
-    Complement: str
-    City: str
-    State: str
-    Zipcode: str
-    PaymentType: str
-    CardNumber: str
-    CardHolderName: str
-    CardExpiration: str
-    CardSecurityNumber: str
-    CardBrand: str
-    Installments: int
-    InstanceId: str
+@dataclass(frozen=True)
+class CustomerCheckout:
+    customerId: int
+    firstName: str
+    lastName: str
+    street: str
+    complement: str
+    city: str
+    state: str
+    zipcode: str
+    paymentType: str
+    cardNumber: str
+    cardHolderName: str
+    cardExpiration: str
+    cardSecurityNumber: str
+    cardBrand: str
+    installments: int
+    instanceId: str
 
 
-class CheckoutRequest(BaseModel):
+@dataclass(frozen=True)
+class CheckoutRequest:
     customerCheckout: CustomerCheckout
-    items: List[CartItem]
+    items: list[CartItem]
     timestamp: datetime
     instanceId: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReserveStockRequest:
+    orderId: int
+    cartItem: CartItem
+    idx: int
+
+
+@dataclass(frozen=True)
+class ReserveStockResponse:
+    order_id: int
+    seller_id: int
+    product_id: int
+    status: ItemStatus
+    idx: int

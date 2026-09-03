@@ -1,12 +1,13 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 
-class CartItem(BaseModel):
-    SellerId: int
-    ProductId: int
-    ProductName: str
-    UnitPrice: float
-    FreightValue: float
-    Quantity: int
-    Voucher: float
-    Version: str
+@dataclass(frozen=True)
+class CartItem:
+    sellerId: int
+    productId: int
+    productName: str
+    unitPrice: float
+    freightValue: float
+    quantity: int
+    voucher: float
+    version: str

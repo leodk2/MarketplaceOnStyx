@@ -6,3 +6,5 @@ class ItemStatus(Enum):
     OUT_OF_STOCK = 1
     PRICE_DIVERGENCE = 2
     IN_STOCK = 3
+    UNKNOWN = 4
+    UNAVAILABLE = 5

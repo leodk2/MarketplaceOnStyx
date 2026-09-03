@@ -1,13 +1,15 @@
-from Entities.Order import Order
-from Entities.OrderItem import OrderItem
-from Entities.OrderHistory import OrderHistory
-from typing import Dict, List
-from pydantic import BaseModel
-from Requests.CustomerCheckout import CustomerCheckout
+from dataclasses import dataclass
 
-class OrderState(BaseModel):
-    checkouts: Dict[int, CustomerCheckout]
-    orders: Dict[int, Order]
-    orderItems:Dict[int,OrderItem]
-    orderHistory:Dict[int,OrderHistory]
-    inStockItems:Dict[int, List[int]]
+from Entities.Order import Order
+from Entities.OrderHistory import OrderHistory
+from Entities.OrderItem import OrderItem
+from Requests.CustomerCheckout import CheckoutRequest
+
+
+@dataclass
+class OrderState:
+    checkouts: dict[int, CheckoutRequest]
+    orders: dict[int, Order]
+    orderItems: dict[int, OrderItem]
+    orderHistory: dict[int, OrderHistory]
+    inStockItems: dict[int, list[int]]
