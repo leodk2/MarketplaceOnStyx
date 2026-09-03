@@ -1,15 +1,15 @@
-from confluent_kafka import TIMESTAMP_CREATE_TIME
+import logging
 from datetime import datetime
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Cart import Cart
 from Entities.CartItem import CartItem
 from Entities.CartStatus import CartStatus
-from Requests.CustomerCheckout import CustomerCheckout, CheckoutRequest
-import logging
+from Requests.CustomerCheckout import CheckoutRequest, CustomerCheckout
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 cart_operator = Operator("cart")
 
 
@@ -31,55 +31,66 @@ class CustomerIdMismatch(Exception):
 
 # For now we assume that a customer only can have one cart
 @cart_operator.register
-async def add(ctx: StatefulFunction, cartItem: CartItem):
-    if cartItem.Quantity <= 0:
-        raise ItemsNegative(f"Item {cartItem.ProductId} shows no positive quantity")
+async def add(ctx: StatefulFunction, item: dict):
+
+    cartItem: CartItem = CartItem(**item)
+    if cartItem.quantity <= 0:
+        raise ItemsNegative(f"Item {cartItem.productId} shows no positive quantity")
 
     cart_data: Cart = ctx.get()
 
-    if cart_data.Status is CartStatus.CHECKOUT_SENT:
+    if cart_data.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent(
-            f"Cart with id {ctx.key} for customer {cart_data.CustomerId} has already checked out "
+            f"Cart with id {ctx.key} for customer {cart_data.customerId} has already checked out "
         )
 
-    cart_data.Items.append(CartItem.model_validate(dict(cartItem)))
+    cart_data.items.append(cartItem)
 
     return ctx.key
 
 
 @cart_operator.register
 async def seal(ctx: StatefulFunction):
-
     cart_data: Cart = ctx.get()
-    if cart_data is None:
+    doSeal(cart_data)
+    return cart_data.customerId
+
+
+def doSeal(cart: Cart | None):
+    if cart is None:
         raise CartDoesNotExist()
 
-    cart_data.Status = CartStatus.OPEN
+    cart.status = CartStatus.OPEN
 
 
 @cart_operator.register
 async def checkout(
     ctx: StatefulFunction, customer_id: int, customerCheckout: CustomerCheckout
 ):
-    if customer_id is not customerCheckout.CustomerId:
+    if customer_id is not customerCheckout.customerId:
         raise CustomerIdMismatch()
-    cart: Cart = ctx.get()
-    if cart is None:
+    data = ctx.get()
+    if data is None:
         raise CartDoesNotExist()
-    elif cart.Status is CartStatus.CHECKOUT_SENT:
+    cart: Cart = ctx.get()
+    if cart.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent()
 
     checkoutRequest = CheckoutRequest(
         customerCheckout=customerCheckout,
-        items=cart.Items,
+        items=cart.items,
         timestamp=datetime.now(),
-        instanceId=customerCheckout.InstanceId,
+        instanceId=customerCheckout.instanceId,
     )
     ctx.call_remote_async("order", "CheckouRequest", ctx.key, (checkoutRequest,))
 
-    ctx.call_remote_async("cart", "seal", ctx.key)
+    doSeal(cart)
+    return customer_id
 
 
 @cart_operator.register
 async def get(ctx: StatefulFunction):
-    return ctx.get()
+    data = ctx.get()
+    if data is None:
+        raise CartDoesNotExist()
+    return data
