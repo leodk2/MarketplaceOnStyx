@@ -75,6 +75,9 @@ async def seal_cart(request, customer_id):
 async def create_customer(request):
     raise NotImplementedError("This endpoint is not yet implemented.")
 
+#TODO: how to return other than 200 
+
+
 @api.post("product")
 @openapi.body(Product, validate=True)
 async def create_product(_, body: Product):
@@ -84,16 +87,44 @@ async def create_product(_, body: Product):
         key=body.ProductId,
         params=(body,)
     )
-    result: StyxResponse = await future.get()
+
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to create product"}, status=500)
+    
     return json(result.response)
 
 @api.patch("product")
-async def update_product_price(request):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+@openapi.body(Product, validate=True)
+async def update_product_price(_, body: Product):
+    future = await styx_client.send_event(
+        operator=product.operator,
+        function="update_product_price",
+        key=body.ProductId,
+        params=(body.Price,)
+    )
+
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to update product price"}, status=500)
+    
+    return json(result.response)
 
 @api.put("product")
-async def replace_product(request):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+@openapi.body(Product, validate=True)
+async def replace_product(_, body: Product):
+    future = await styx_client.send_event(
+        operator=product.operator,
+        function="replace_product",
+        key=body.ProductId,
+        params=(body,)
+)
+    
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to update product price"}, status=500)
+    
+    return json(result.response)
 
 @api.get("product/<product_id>")
 async def get_product(_, product_id: int):
@@ -102,7 +133,10 @@ async def get_product(_, product_id: int):
         key=product_id,
         function="get_product"
     )
-    result: StyxResponse = await future.get()
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to get product"}, status=500)
+
     return json(result.response)
 
 @api.post("seller")
