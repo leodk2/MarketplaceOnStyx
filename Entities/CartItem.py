@@ -1,7 +1,7 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
-
-class CartItem(BaseModel):
+@dataclass
+class CartItem:
     SellerId: int
     ProductId: int
     ProductName: str

@@ -10,12 +10,23 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
 import Functions.Product as product
+import Functions.Cart as cart
+import Functions.Stock as stock
+
 import Entities.Product as product_entity
+import Entities.Cart as cart_entity
+import Entities.CartItem as cart_item_entity
+import Entities.CartStatus as cart_status_entity
+import Entities.StockItem as stock_item_entity
+from Entities.Product import Product
+from Entities.StockItem import StockItem
+
+import Requests.CustomerCheckout as customer_checkout_entity
+
 # from functions.order import order_operator
 # from functions.payment import payment_operator
 # from functions.stock import stock_operator
 
-from Entities.Product import Product
 
 APP_NAME = "marketplaceonstyx"
 
@@ -48,12 +59,26 @@ async def submit_dataflow_graph(_, n_partitions: int):
     )
 
     product.operator.set_n_partitions(n_partitions)
+    cart.operator.set_n_partitions(n_partitions)
+    stock.operator.set_n_partitions(n_partitions)
 
     g.add_operators(
-        product.operator
+        product.operator,
+        cart.operator,
+        stock.operator,
     )
 
-    await styx_client.submit_dataflow(g, external_modules=(product_entity,))
+    await styx_client.submit_dataflow(
+        g,
+        external_modules=(
+            product_entity,
+            cart_entity,
+            cart_item_entity,
+            cart_status_entity,
+            customer_checkout_entity,
+            stock_item_entity,
+        ),
+    )
     return json({"Graph submitted": True})
 
 
@@ -122,7 +147,7 @@ async def replace_product(_, body: Product):
     
     result: StyxResponse | None = await future.get()
     if result is None:
-        return json({"Error": "Failed to update product price"}, status=500)
+        return json({"Error": "Failed to update product"}, status=500)
     
     return json(result.response)
 
@@ -153,8 +178,32 @@ async def deliver_shipment(request, tid):
     raise NotImplementedError("This endpoint is not yet implemented.")
 
 @api.post("stock")
-async def create_stock(request):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+@openapi.body(StockItem, validate=True)
+async def create_stock(_, body: StockItem):
+    future = await styx_client.send_event(
+        operator=stock.operator,
+        key=body.ProductId,
+        function="create_stock",
+        params=(body,)
+    )
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to create stock"}, status=500)
+
+    return json(result.response)
+
+@api.get("stock/<product_id>")
+async def get_stock(_, product_id: int):
+    future = await styx_client.send_event(
+        operator=stock.operator,
+        key=product_id,
+        function="get_stock"
+    )
+    result: StyxResponse | None = await future.get()
+    if result is None:
+        return json({"Error": "Failed to get stock"}, status=500)
+
+    return json(result.response)
 
 
 app.blueprint(api)

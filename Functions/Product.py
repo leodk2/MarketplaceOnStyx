@@ -18,8 +18,7 @@ class ProductDoesNotExist(Exception):
 class ProductAlreadyExists(Exception):
     pass
 
-#TODO: implement remote calls and call them
-
+#TODO: should this have any remote calls?
 @operator.register
 async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     state = ctx.get()
@@ -29,11 +28,20 @@ async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     return product
 
 @operator.register
-async def replace_product(ctx: StatefulFunction, product: Product) -> Product:
+async def replace_product(ctx: StatefulFunction, product) -> Product:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Product with id {ctx.key} does not exist")
+
+    ctx.call_remote_async(
+        function_name="on_product_update",
+        operator_name="stock",
+        key=ctx.key,
+        params=(product['Version'],)
+    )
+
     ctx.put(product)
+
     return ctx.get()
 
 @operator.register
@@ -41,8 +49,17 @@ async def update_product_price(ctx: StatefulFunction, new_price: float) -> Produ
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Product with id {ctx.key} does not exist")
+    
+    ctx.call_remote_async(
+        function_name="on_product_update_price",
+        operator_name="cart",
+        key=ctx.key,
+        params=(new_price,)
+    )
+
     state['Price'] = new_price
     ctx.put(state)
+
     return ctx.get()
 
 @operator.register

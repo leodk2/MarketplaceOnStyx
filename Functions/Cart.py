@@ -10,7 +10,9 @@ from Requests.CustomerCheckout import CustomerCheckout, CheckoutRequest
 import logging
 
 logger = logging.Logger(__name__)
-cart_operator = Operator("cart")
+
+OPERATOR_NAME = "cart"
+operator = Operator(OPERATOR_NAME)
 
 
 class CheckoutAlreadySent(Exception):
@@ -30,7 +32,7 @@ class CustomerIdMismatch(Exception):
 
 
 # For now we assume that a customer only can have one cart
-@cart_operator.register
+@operator.register
 async def add(ctx: StatefulFunction, cartItem: CartItem):
     if cartItem.Quantity <= 0:
         raise ItemsNegative(f"Item {cartItem.ProductId} shows no positive quantity")
@@ -47,7 +49,7 @@ async def add(ctx: StatefulFunction, cartItem: CartItem):
     return ctx.key
 
 
-@cart_operator.register
+@operator.register
 async def seal(ctx: StatefulFunction):
 
     cart_data: Cart = ctx.get()
@@ -57,7 +59,7 @@ async def seal(ctx: StatefulFunction):
     cart_data.Status = CartStatus.OPEN
 
 
-@cart_operator.register
+@operator.register
 async def checkout(
     ctx: StatefulFunction, customer_id: int, customerCheckout: CustomerCheckout
 ):
@@ -80,6 +82,14 @@ async def checkout(
     ctx.call_remote_async("cart", "seal", ctx.key)
 
 
-@cart_operator.register
+@operator.register
 async def get(ctx: StatefulFunction):
     return ctx.get()
+
+
+
+@operator.register
+async def on_product_update_price(ctx: StatefulFunction, new_price: float):
+    # raise NotImplementedError("This function is not yet implemented."
+    # TODO: what should happen on product price update? 
+    return "Dummy return"
