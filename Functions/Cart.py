@@ -31,7 +31,7 @@ class CustomerIdMismatch(Exception):
 
 # For now we assume that a customer only can have one cart
 @cart_operator.register
-async def add(ctx: StatefulFunction, item: dict):
+async def add_item(ctx: StatefulFunction, item: dict):
 
     cartItem: CartItem = CartItem(**item)
     if cartItem.quantity <= 0:

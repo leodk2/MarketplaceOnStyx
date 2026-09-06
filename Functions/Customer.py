@@ -1,12 +1,13 @@
-from dataclasses import asdict
-from Entities.CustomerNotificationType import CustomerNotificationType
 import logging
-from Entities.Customer import Customer
+from dataclasses import asdict
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
+from Entities.Customer import Customer
+from Entities.CustomerNotificationType import CustomerNotificationType
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 customer_operator = Operator("customer")
 
 

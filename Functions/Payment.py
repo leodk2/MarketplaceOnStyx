@@ -15,10 +15,10 @@ from Requests.CustomerCheckout import (
     PaymentStockEvent,
 )
 
-payment = Operator("payment", 4)
+payment_operator = Operator("payment", 4)
 
 
-@payment.register
+@payment_operator.register
 async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
     customer_checkout: CustomerCheckout = invoice.customer_checkout
 

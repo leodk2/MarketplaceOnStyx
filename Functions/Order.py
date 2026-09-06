@@ -23,7 +23,7 @@ from Requests.CustomerCheckout import (
 from States.OrderState import OrderState
 
 # keyed by customer id which  is the same as cart id
-operator = Operator("order")
+order_operator = Operator("order")
 
 logger = getLogger(__name__)
 
@@ -33,7 +33,7 @@ class OrderNotFoundException(Exception):
 
 
 # We should store a dictionary containing the next order_id and the order state
-@operator.register
+@order_operator.register
 async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutRequest):
     data: dict = ctx.get()
     state = OrderState(**(data.get("state", {})))
@@ -53,7 +53,7 @@ async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutReques
     ctx.put({"state": state, "next_id": order_id + 1})
 
 
-@operator.register
+@order_operator.register
 async def TryReserveResponse(ctx: StatefulFunction, resp: ReserveStockResponse):
     order_id = resp.order_id
     data: dict = ctx.get()
@@ -194,7 +194,7 @@ def generate_order(
     )
 
 
-@operator.register
+@order_operator.register
 async def payment_notification(ctx: StatefulFunction, payment: PaymentNotification):
     now = datetime.now()
     state: OrderState = OrderState(**(ctx.get()["state"]))
@@ -211,7 +211,7 @@ async def payment_notification(ctx: StatefulFunction, payment: PaymentNotificati
     ctx.put({"next_id": next_id, "state": state})
 
 
-@operator.register
+@order_operator.register
 async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     state = OrderState(**(ctx.get()["state"]))
     notif: ShipmentNotification = ShipmentNotification(**notif_dict)
@@ -245,7 +245,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
         state.clean_state(order_id)
 
 
-@operator.register
+@order_operator.register
 async def GetOrders(ctx: StatefulFunction):
     # have to check if any state exists
     return ctx.get()
