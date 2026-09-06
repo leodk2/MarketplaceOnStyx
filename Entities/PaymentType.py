@@ -6,3 +6,9 @@ class PaymentType(Enum):
     BOLETO = 1
     VOURCHER = 2
     DEBIT_CARD = 3
+
+
+class PaymentStatus(Enum):
+    REQUIRES_PAYMENT_METHOD = 0
+    SUCCEEDED = 1
+    CANCELED = 2

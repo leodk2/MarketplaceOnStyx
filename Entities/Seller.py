@@ -1,17 +1,18 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 
-class Seller(BaseModel):
+@dataclass
+class Seller:
     Id: int
-    Name: str = ""
-    CompanyName: str = ""
-    Email: str = ""
-    Phone: str = ""
-    MobilePhone: str = ""
-    Cpf: str = ""
-    Cnpj: str = ""
-    Address: str = ""
-    Complement: str = ""
-    City: str = ""
-    State: str = ""
-    ZipCode: str = ""
+    Name: str
+    CompanyName: str
+    Email: str
+    Phone: str
+    MobilePhone: str
+    Cpf: str
+    Cnpj: str
+    Address: str
+    Complement: str
+    City: str
+    State: str
+    ZipCode: str

@@ -1,22 +1,23 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 
-class Customer(BaseModel):
+@dataclass
+class Customer:
     Id: int
-    FirstName: str = ""
-    Lastname: str = ""
-    Address: str = ""
-    Complement: str = ""
-    BirthDate: str = ""
-    ZipCode: str = ""
-    City: str = ""
-    State: str = ""
-    CardNumber: str = ""
-    CardSecurityNumber: str = ""
-    CardExpiration: str = ""
-    CardHolderName: str = ""
-    CardType: str = ""
-    SuccessPaymentCount: int = 0
-    FailedPaymentCount: int = 0
-    DeliveryCount: int = 0
-    Data: str = ""
+    FirstName: str
+    Lastname: str
+    Address: str
+    Complement: str
+    BirthDate: str
+    ZipCode: str
+    City: str
+    State: str
+    CardNumber: str
+    CardSecurityNumber: str
+    CardExpiration: str
+    CardHolderName: str
+    CardType: str
+    SuccessPaymentCount: int
+    FailedPaymentCount: int
+    DeliveryCount: int
+    Data: str

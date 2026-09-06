@@ -14,3 +14,13 @@ class StockItem:
     version: str
     updated_at: datetime
     created_at: datetime
+
+    def reserve(self, qty: int):
+        self.qty_reserved += qty
+
+    def confirm_reservation(self, qty):
+        self.qty_reserved -= qty
+        self.qty_available += qty
+
+    def cancel_reservation(self, qty):
+        self.qty_reserved -= qty

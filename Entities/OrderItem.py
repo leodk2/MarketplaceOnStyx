@@ -10,7 +10,7 @@ class OrderItem:
     productName: str
     sellerId: int
     unitPrice: float
-    frieghtValue: float
+    freightValue: float
     quantity: int
     totalPrice: float
     totalAmount: float
