@@ -1,6 +1,3 @@
-from main import deliver_shipment
-from Entities.Packages import PackageStatus
-from Entities.Shipment import ShipmentStatus
 from dataclasses import asdict
 from logging import getLogger
 
@@ -8,6 +5,8 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Order import OrderStatus
+from Entities.Packages import PackageStatus
+from Entities.Shipment import ShipmentStatus
 from Requests.CustomerCheckout import (
     InvoiceIssued,
     PaymentNotification,
@@ -15,12 +14,18 @@ from Requests.CustomerCheckout import (
 )
 from States.SellerState import OrderEntry, SellerState
 
-seller = Operator("seller", 4)
+seller_operator = Operator("seller", 4)
 
 logger = getLogger(__name__)
 
 
-@seller.register
+@seller_operator.register
+async def register_seller(ctx: StatefulFunction, seller):
+    ctx.put(seller)
+    return ctx.key
+
+
+@seller_operator.register
 async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
     state = SellerState(**(ctx.get()))
 
@@ -53,7 +58,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
     ctx.put(asdict(state))
 
 
-@seller.register
+@seller_operator.register
 async def payment_notification(ctx: StatefulFunction, payment: PaymentNotification):
     state = SellerState(**(ctx.get()))
 
@@ -69,7 +74,7 @@ async def payment_notification(ctx: StatefulFunction, payment: PaymentNotificati
     ctx.put(asdict(state))
 
 
-@seller.register
+@seller_operator.register
 async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerState(**(ctx.get()))
     notif = ShipmentNotification(**notif_dict)
