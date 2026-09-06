@@ -17,6 +17,8 @@ from Requests.CustomerCheckout import (
     PaymentNotification,
     ReserveStockRequest,
     ReserveStockResponse,
+    ShipmentNotification,
+    ShipmentStatus,
 )
 from States.OrderState import OrderState
 
@@ -26,6 +28,10 @@ operator = Operator("order")
 logger = getLogger(__name__)
 
 
+class OrderNotFoundException(Exception):
+    pass
+
+
 # We should store a dictionary containing the next order_id and the order state
 @operator.register
 async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutRequest):
@@ -33,7 +39,6 @@ async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutReques
     state = OrderState(**(data.get("state", {})))
     order_id = data.get("next_id", 1)
     state.checkouts.update({order_id: checkoutRequest})
-    # TODO How do we get next order id?
     for idx, item in enumerate(checkoutRequest.items):
         reservation_event: ReserveStockRequest = ReserveStockRequest(
             order_id, item, idx
@@ -207,8 +212,37 @@ async def payment_notification(ctx: StatefulFunction, payment: PaymentNotificati
 
 
 @operator.register
-async def ShipmentNotification(ctx: StatefulFunction):
-    pass
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+    state = OrderState(**(ctx.get()["state"]))
+    notif: ShipmentNotification = ShipmentNotification(**notif_dict)
+
+    order_id = notif.order_id
+    order = state.orders.get(order_id, None)
+    if order is None:
+        raise OrderNotFoundException(
+            f"order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
+        )
+
+    now = datetime.now()
+
+    status = OrderStatus.READY_FOR_SHIPMENT
+    if notif.shipment_status is ShipmentStatus.DELIVERY_IN_PROGRESS:
+        status = OrderStatus.IN_TRANSIT
+    elif notif.shipment_status is ShipmentStatus.CONCLUDED:
+        status = OrderStatus.DELIVERED
+
+    history = OrderHistory(order_id, now, status)
+
+    state.orderHistory[order_id].append(history)
+
+    order.updatedAt = now
+    order.orderStatus = status
+    if status is OrderStatus.DELIVERED:
+        order.deliveredCustomerDate = notif.event_date
+
+        # more logging to postgres
+
+        state.clean_state(order_id)
 
 
 @operator.register
