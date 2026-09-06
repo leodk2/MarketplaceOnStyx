@@ -12,7 +12,8 @@ shipment = Operator("shipment", 4)
 
 
 @shipment.register
-async def payment_confirmed(ctx: StatefulFunction, payment: PaymentConfirmed):
+async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
+    payment = PaymentConfirmed(**payment_dict)
     now = datetime.now()
     shipment_id = ctx.get().get("next_id", 0) + 1
     shipment = Shipment(
@@ -70,4 +71,3 @@ async def payment_confirmed(ctx: StatefulFunction, payment: PaymentConfirmed):
         "order", "shipment_notification", payment.customer_checkout.customerId, (notif,)
     )
     # TODO transaction mark/egress message?
-    pass

@@ -65,8 +65,9 @@ def doSeal(cart: Cart | None):
 
 @cart_operator.register
 async def checkout(
-    ctx: StatefulFunction, customer_id: int, customerCheckout: CustomerCheckout
+    ctx: StatefulFunction, customer_id: int, customerCheckout_dict: dict
 ):
+    customerCheckout = CustomerCheckout(**customerCheckout_dict)
     if customer_id is not customerCheckout.customerId:
         raise CustomerIdMismatch()
     data = ctx.get()
@@ -82,7 +83,7 @@ async def checkout(
         timestamp=datetime.now(),
         instanceId=customerCheckout.instanceId,
     )
-    ctx.call_remote_async("order", "CheckouRequest", ctx.key, (checkoutRequest,))
+    ctx.call_remote_async("order", "checkout_request", ctx.key, (checkoutRequest,))
 
     doSeal(cart)
     return customer_id

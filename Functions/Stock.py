@@ -21,9 +21,8 @@ logger = getLogger(__name__)
 
 
 @stock_operator.register
-async def attempt_reserve_stock(
-    ctx: StatefulFunction, item: ReserveStockRequest, caller_id
-):
+async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_id):
+    item = ReserveStockRequest(**item_dict)
     cart_item: CartItem = item.cartItem
 
     status = get_stock_status(ctx, cart_item.quantity, cart_item.version)
@@ -31,13 +30,12 @@ async def attempt_reserve_stock(
     response = ReserveStockResponse(
         item.orderId, cart_item.sellerId, cart_item.productId, status, item.idx
     )
-    ctx.call_remote_async("order", "TryReserve", caller_id, (response,))
-
-    return ""
+    ctx.call_remote_async("order", "try_reserve_response", caller_id, (response,))
 
 
 @stock_operator.register
-async def payment_confirmed(ctx: StatefulFunction, payment: PaymentStockEvent):
+async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
+    payment = PaymentStockEvent(**payment_dict)
     state = StockItem(**(ctx.get()))
 
     if payment.status is PaymentStatus.SUCCEEDED:

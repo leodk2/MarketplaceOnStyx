@@ -16,8 +16,8 @@ class CustomerDoesNotExist(Exception):
 
 
 @customer_operator.register
-async def register_customer(ctx: StatefulFunction, customer: Customer):
-    ctx.put(asdict(customer))
+async def register_customer(ctx: StatefulFunction, customer: dict):
+    ctx.put(customer)
     return ctx.key
 
 
@@ -30,9 +30,8 @@ async def GetCustomer(ctx: StatefulFunction):
 
 
 @customer_operator.register
-async def payment_notification(
-    ctx: StatefulFunction, notificationType: CustomerNotificationType
-):
+async def payment_notification(ctx: StatefulFunction, notificationType_value):
+    notificationType = CustomerNotificationType(notificationType_value)
     state = ctx.get()
 
     if state is None:

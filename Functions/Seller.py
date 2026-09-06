@@ -26,7 +26,8 @@ async def register_seller(ctx: StatefulFunction, seller):
 
 
 @seller_operator.register
-async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
+async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
+    invoice = InvoiceIssued(**invoice_dict)
     state = SellerState(**(ctx.get()))
 
     order_items = invoice.items
@@ -59,7 +60,8 @@ async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
 
 
 @seller_operator.register
-async def payment_notification(ctx: StatefulFunction, payment: PaymentNotification):
+async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
+    payment = PaymentNotification(**payment_dict)
     state = SellerState(**(ctx.get()))
 
     id = f"{payment.customer_id}-{payment.order_id}"

@@ -19,7 +19,8 @@ payment_operator = Operator("payment", 4)
 
 
 @payment_operator.register
-async def invoice_issued(ctx: StatefulFunction, invoice: InvoiceIssued):
+async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
+    invoice = InvoiceIssued(**invoice_dict)
     customer_checkout: CustomerCheckout = invoice.customer_checkout
 
     now: datetime = datetime.now()

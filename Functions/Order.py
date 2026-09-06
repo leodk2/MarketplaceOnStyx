@@ -34,7 +34,8 @@ class OrderNotFoundException(Exception):
 
 # We should store a dictionary containing the next order_id and the order state
 @order_operator.register
-async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutRequest):
+async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
+    checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
     data: dict = ctx.get()
     state = OrderState(**(data.get("state", {})))
     order_id = data.get("next_id", 1)
@@ -54,7 +55,8 @@ async def checkoutRequest(ctx: StatefulFunction, checkoutRequest: CheckoutReques
 
 
 @order_operator.register
-async def TryReserveResponse(ctx: StatefulFunction, resp: ReserveStockResponse):
+async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
+    resp = ReserveStockResponse(**resp_dict)
     order_id = resp.order_id
     data: dict = ctx.get()
     state = OrderState(**(data.get("state", {})))
@@ -65,8 +67,6 @@ async def TryReserveResponse(ctx: StatefulFunction, resp: ReserveStockResponse):
             state.inStockItems[order_id].append(resp.idx)
         else:
             state.inStockItems.update({order_id: [resp.idx]})
-
-    # TODO check if all replies from stock are recieved
 
     if state.decrease_remaining_acks(order_id) == 0:
         state.unset_remaining_acks(order_id)
@@ -195,7 +195,8 @@ def generate_order(
 
 
 @order_operator.register
-async def payment_notification(ctx: StatefulFunction, payment: PaymentNotification):
+async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
+    payment = PaymentNotification(**payment_dict)
     now = datetime.now()
     state: OrderState = OrderState(**(ctx.get()["state"]))
     next_id = ctx.get()["next_id"]
