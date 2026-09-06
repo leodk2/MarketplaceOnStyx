@@ -87,9 +87,3 @@ async def get(ctx: StatefulFunction):
     return ctx.get()
 
 
-
-@operator.register
-async def on_product_update_price(ctx: StatefulFunction, new_price: float):
-    # raise NotImplementedError("This function is not yet implemented."
-    # TODO: what should happen on product price update? 
-    return "Dummy return"

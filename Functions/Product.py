@@ -49,13 +49,6 @@ async def update_product_price(ctx: StatefulFunction, new_price: float) -> Produ
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Product with id {ctx.key} does not exist")
-    
-    ctx.call_remote_async(
-        function_name="on_product_update_price",
-        operator_name="cart",
-        key=ctx.key,
-        params=(new_price,)
-    )
 
     state['Price'] = new_price
     ctx.put(state)
