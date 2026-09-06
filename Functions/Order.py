@@ -1,18 +1,20 @@
 import itertools
-from Entities.OrderHistory import OrderHistory
-from Entities.OrderItem import OrderItem
-from Entities.Order import Order, OrderStatus
-from Entities.CartItem import CartItem
-from datetime import datetime, timedelta
 from dataclasses import asdict
+from datetime import datetime, timedelta
 from logging import getLogger
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
+from Entities.CartItem import CartItem
 from Entities.ItemStatus import ItemStatus
+from Entities.Order import Order, OrderStatus
+from Entities.OrderHistory import OrderHistory
+from Entities.OrderItem import OrderItem
 from Requests.CustomerCheckout import (
     CheckoutRequest,
+    InvoiceIssued,
+    PaymentNotification,
     ReserveStockRequest,
     ReserveStockResponse,
 )
@@ -159,19 +161,49 @@ def generate_order(
     items_per_seller = itertools.groupby(order_items, lambda oi: oi.sellerId)
 
     for seller_id, ois in items_per_seller:
-        invoice = (
-            object()
+        seller_invoice = InvoiceIssued(
+            checkoutRequest.customerCheckout,
+            order_id,
+            invoice_number,
+            list(ois),
+            now,
+            order.totalInvoice,
+            checkoutRequest.instanceId,
         )  # TODO create invoice with order_items for a specific seller here
 
-        ctx.call_remote_async("seller", "invoice_issued", seller_id, (invoice,))
+        ctx.call_remote_async(
+            "seller", "invoice_issued", seller_id, (asdict(seller_invoice),)
+        )
 
-    invoice = object()  # TODO create invoice with all order_items here
-    ctx.call_remote_async("payment", "invoice_issued", ctx.key, (invoice,))
+    payment_invoice = InvoiceIssued(
+        checkoutRequest.customerCheckout,
+        order_id,
+        invoice_number,
+        order_items,
+        now,
+        order.totalInvoice,
+        checkoutRequest.instanceId,
+    )  # TODO create invoice with order_items for a specific seller here
+    ctx.call_remote_async(
+        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
+    )
 
 
 @operator.register
-async def PaymentNotification(ctx: StatefulFunction):
-    pass
+async def payment_notification(ctx: StatefulFunction, payment: PaymentNotification):
+    now = datetime.now()
+    state: OrderState = OrderState(**(ctx.get()["state"]))
+    next_id = ctx.get()["next_id"]
+
+    order_id = payment.order_id
+
+    history: OrderHistory = OrderHistory(order_id, now, OrderStatus.PAYMENT_PROCESSED)
+    state.orderHistory[order_id].append(history)
+
+    order: Order = state.orders[order_id]
+    order.orderStatus = OrderStatus.PAYMENT_PROCESSED
+    order.updatedAt = now
+    ctx.put({"next_id": next_id, "state": state})
 
 
 @operator.register

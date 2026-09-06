@@ -1,4 +1,5 @@
-from dataclasses import astuple
+from dataclasses import asdict
+from Entities.PaymentType import PaymentStatus
 from datetime import datetime
 from logging import getLogger
 
@@ -8,7 +9,11 @@ from styx.common.stateful_function import StatefulFunction
 from Entities.CartItem import CartItem
 from Entities.ItemStatus import ItemStatus
 from Entities.StockItem import StockItem
-from Requests.CustomerCheckout import ReserveStockRequest, ReserveStockResponse
+from Requests.CustomerCheckout import (
+    PaymentStockEvent,
+    ReserveStockRequest,
+    ReserveStockResponse,
+)
 
 stock_operator = Operator("stock", composite_key_hash_params=(0, ":"))
 # composite key of seller_id:product_id
@@ -31,6 +36,20 @@ async def attempt_reserve_stock(
     return ""
 
 
+@stock_operator.register
+async def payment_confirmed(ctx: StatefulFunction, payment: PaymentStockEvent):
+    state = StockItem(**(ctx.get()))
+
+    if payment.status is PaymentStatus.SUCCEEDED:
+        state.confirm_reservation(payment.quantity)
+    else:
+        state.cancel_reservation(payment.quantity)
+    # handle this key not having a stock item
+    state.updated_at = datetime.now()
+
+    ctx.put(asdict(state))
+
+
 def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> ItemStatus:
     state = ctx.get()
     if state is None:
@@ -41,7 +60,9 @@ def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> Item
     if stockItem.qty_reserved + quantity > stockItem.qty_available:
         return ItemStatus.OUT_OF_STOCK
 
-    stockItem.qty_reserved += quantity
+    stockItem.reserve(quantity)
     stockItem.updated_at = datetime.now()
 
-    return ItemStatus().DELETED
+    ctx.put(asdict(stockItem))
+
+    return ItemStatus.IN_STOCK

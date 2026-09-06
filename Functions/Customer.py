@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from Entities.CustomerNotificationType import CustomerNotificationType
 import logging
 from Entities.Customer import Customer
@@ -15,7 +16,7 @@ class CustomerDoesNotExist(Exception):
 
 @customer_operator.register
 async def RegisterCustomer(ctx: StatefulFunction, customer: Customer):
-    ctx.put(*customer)
+    ctx.put(asdict(customer))
 
 
 @customer_operator.register
@@ -38,20 +39,21 @@ async def CustomerNotification(
 
     match notificationType:
         case CustomerNotificationType.PAYMENT_SUCCESS:
-            customer.SuccessPaymentCount+=1
+            customer.SuccessPaymentCount += 1
         case CustomerNotificationType.PAYMENT_FAILED:
-            customer.FailedPaymentCount+=1
+            customer.FailedPaymentCount += 1
         case CustomerNotificationType.CHECKOUT_FAILED:
-            customer.FailedPaymentCount+=1
+            customer.FailedPaymentCount += 1
     ctx.put(customer)
 
+
 @customer_operator.register
-async def HandleDeliveryNotification(ctx:StatefulFunction):
+async def HandleDeliveryNotification(ctx: StatefulFunction):
     state = ctx.get()
-    customer:Customer
+    customer: Customer
     if state is None:
-        customer = Customer(**{})
+        raise CustomerDoesNotExist()
     else:
-        customer = Customer(**state)    
-    customer.DeliveryCount+=1
+        customer = Customer(**state)
+    customer.DeliveryCount += 1
     ctx.put(customer)
