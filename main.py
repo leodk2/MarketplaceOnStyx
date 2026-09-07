@@ -1,6 +1,8 @@
 from __future__ import annotations
 import os
+from typing import cast
 
+from sanic import Blueprint, Request, Sanic, json, text
 from sanic import Blueprint, Sanic
 from sanic import Sanic, json
 from sanic_ext import openapi
@@ -10,6 +12,14 @@ from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
+from Entities.Customer import Customer
+from Functions.Cart import cart_operator
+from Functions.Customer import customer_operator
+from Functions.Order import order_operator
+from Functions.Payment import payment_operator
+from Functions.Seller import seller_operator
+from Functions.Stock import stock_operator
+# from Functions.Product import product_operator
 from Functions.Product import product_operator 
 from Functions.Cart import cart_operator 
 from Functions.Stock import stock_operator 
@@ -53,7 +63,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
     g = StateflowGraph(
         APP_NAME,
         operator_state_backend=LocalStateBackend.DICT,
-        max_operator_parallelism=n_partitions
+        max_operator_parallelism=n_partitions,
     )
 
     product_operator.set_n_partitions(n_partitions)
@@ -80,22 +90,51 @@ async def submit_dataflow_graph(_, n_partitions: int):
     return json({"Graph submitted": True})
 
 
-
 @api.put("cart/<customer_id>/add")
-async def add_to_cart(request, customer_id):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def add_to_cart(request: Request, customer_id):
+    ci = request.json.get("item")  # name subject to change
+    req = await styx_client.send_event(cart_operator, customer_id, "add_item", (ci,))
+    res = cast(StyxResponse, await req.get())
+    return text(
+        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    )
+
 
 @api.post("cart/<customer_id>/checkout")
-async def checkout_cart(request, customer_id):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def checkout_cart(request: Request, customer_id):
+    checkout_request = request.json.get("checkout")
+
+    req = await styx_client.send_event(
+        cart_operator, customer_id, "checkout", (customer_id, checkout_request)
+    )
+    res = cast(StyxResponse, await req.get())
+    return text(
+        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    )
+
 
 @api.post("cart/<customer_id>/seal")
-async def seal_cart(request, customer_id):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def seal_cart(request: Request, customer_id):
+    req = await styx_client.send_event(
+        cart_operator, customer_id, "seal", (customer_id,)
+    )
+    res = cast(StyxResponse, await req.get())
+    return text(
+        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    )
+
 
 @api.post("customer")
-async def create_customer(request):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def create_customer(request: Request):
+    customer = Customer(**(request.json.get("customer")))
+    req = await styx_client.send_event(
+        customer_operator, customer.Id, "register_customer", (customer,)
+    )
+    res = cast(StyxResponse, await req.get())
+    return text(
+        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    )
+
 
 @api.post("product")
 @openapi.body(Product, validate=True)
@@ -135,6 +174,7 @@ async def update_product_price(_, body: Product):
 
     return json(result.response)
 
+
 @api.put("product")
 @openapi.body(Product, validate=True)
 async def replace_product(_, body: Product):
@@ -170,18 +210,28 @@ async def get_product(_, product_id: int):
 
     return json(result.response)
 
+
 @api.post("seller")
-async def create_seller(request):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def create_seller(request: Request):
+    seller = request.json.get("seller")
+    req = await styx_client.send_event(
+        seller_operator, seller.Id, "register_seller", (seller,)
+    )
+    res = cast(StyxResponse, await req.get())
+    return text(
+        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    )
 
 
 @api.get("seller/dashboard/<seller_id>")
 async def get_seller_dashboard(request, seller_id):
     raise NotImplementedError("This endpoint is not yet implemented.")
 
+
 @api.patch("shipment/<tid>")
 async def deliver_shipment(request, tid):
     raise NotImplementedError("This endpoint is not yet implemented.")
+
 
 @api.post("stock")
 @openapi.body(StockItem, validate=True)
