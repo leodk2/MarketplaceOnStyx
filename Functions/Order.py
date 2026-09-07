@@ -221,7 +221,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     order = state.orders.get(order_id, None)
     if order is None:
         raise OrderNotFoundException(
-            f"order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
+            f"Error: order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
         )
 
     now = datetime.now()
