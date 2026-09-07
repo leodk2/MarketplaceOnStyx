@@ -12,11 +12,10 @@ from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-from Operators.Cart import cart_operator
 from Operators.Customer import customer_operator
 from Operators.Order import order_operator
-# from Operators.Payment import payment_operator
-# from Operators.Seller import seller_operator
+from Operators.Payment import payment_operator
+from Operators.Seller import seller_operator
 from Operators.Product import product_operator 
 from Operators.Cart import cart_operator 
 from Operators.Stock import stock_operator 
@@ -69,12 +68,20 @@ async def submit_dataflow_graph(_, n_partitions: int):
     cart_operator.set_n_partitions(n_partitions)
     stock_operator.set_n_partitions(n_partitions)
     product_cart_router_operator.set_n_partitions(n_partitions)
+    payment_operator.set_n_partitions(n_partitions)
+    order_operator.set_n_partitions(n_partitions)
+    seller_operator.set_n_partitions(n_partitions)
+    customer_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
         product_operator,
         cart_operator,
         stock_operator,
         product_cart_router_operator,
+        payment_operator,
+        order_operator,
+        seller_operator,
+        customer_operator,
     )
 
     await styx_client.submit_dataflow(
