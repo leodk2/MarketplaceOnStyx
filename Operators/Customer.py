@@ -1,11 +1,13 @@
-from Entities.CustomerNotificationType import CustomerNotificationType
 import logging
-from Entities.Customer import Customer
+from dataclasses import asdict
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
+from Entities.Customer import Customer
+from Entities.CustomerNotificationType import CustomerNotificationType
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 customer_operator = Operator("customer")
 
 
@@ -14,8 +16,9 @@ class CustomerDoesNotExist(Exception):
 
 
 @customer_operator.register
-async def RegisterCustomer(ctx: StatefulFunction, customer: Customer):
-    ctx.put(*customer)
+async def register_customer(ctx: StatefulFunction, customer: dict):
+    ctx.put(customer)
+    return ctx.key
 
 
 @customer_operator.register
@@ -27,9 +30,8 @@ async def GetCustomer(ctx: StatefulFunction):
 
 
 @customer_operator.register
-async def CustomerNotification(
-    ctx: StatefulFunction, notificationType: CustomerNotificationType
-):
+async def payment_notification(ctx: StatefulFunction, notificationType_value):
+    notificationType = CustomerNotificationType(notificationType_value)
     state = ctx.get()
 
     if state is None:
@@ -38,20 +40,21 @@ async def CustomerNotification(
 
     match notificationType:
         case CustomerNotificationType.PAYMENT_SUCCESS:
-            customer.SuccessPaymentCount+=1
+            customer.SuccessPaymentCount += 1
         case CustomerNotificationType.PAYMENT_FAILED:
-            customer.FailedPaymentCount+=1
+            customer.FailedPaymentCount += 1
         case CustomerNotificationType.CHECKOUT_FAILED:
-            customer.FailedPaymentCount+=1
+            customer.FailedPaymentCount += 1
     ctx.put(customer)
 
+
 @customer_operator.register
-async def HandleDeliveryNotification(ctx:StatefulFunction):
+async def HandleDeliveryNotification(ctx: StatefulFunction):
     state = ctx.get()
-    customer:Customer
+    customer: Customer
     if state is None:
-        customer = Customer(**{})
+        raise CustomerDoesNotExist()
     else:
-        customer = Customer(**state)    
-    customer.DeliveryCount+=1
+        customer = Customer(**state)
+    customer.DeliveryCount += 1
     ctx.put(customer)

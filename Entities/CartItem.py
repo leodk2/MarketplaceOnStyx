@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 
-@dataclass
+
+@dataclass(frozen=True)
 class CartItem:
-    SellerId: int
-    ProductId: int
-    ProductName: str
-    UnitPrice: float
-    FreightValue: float
-    Quantity: int
-    Voucher: float
-    Version: str
+    sellerId: int
+    productId: int
+    productName: str
+    unitPrice: float
+    freightValue: float
+    quantity: int
+    voucher: float
+    version: str
