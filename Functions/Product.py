@@ -1,7 +1,5 @@
 import logging
 
-import msgspec
-
 from Entities.Product import Product
 
 from styx.common.operator import Operator
@@ -18,7 +16,7 @@ class ProductDoesNotExist(Exception):
 class ProductAlreadyExists(Exception):
     pass
 
-#TODO: should this have any remote calls?
+
 @operator.register
 async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     state = ctx.get()
@@ -49,10 +47,8 @@ async def update_product_price(ctx: StatefulFunction, new_price: float) -> Produ
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
-
     state['Price'] = new_price
     ctx.put(state)
-
     return ctx.get()
 
 @operator.register
