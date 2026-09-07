@@ -10,10 +10,10 @@ from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-from Functions.Product import product_operator 
-from Functions.Cart import cart_operator 
-from Functions.Stock import stock_operator 
-from Functions.ProductCartRouter import product_cart_router_operator
+from Operators.Product import product_operator 
+from Operators.Cart import cart_operator 
+from Operators.Stock import stock_operator 
+from Operators.ProductCartRouter import product_cart_router_operator
 
 import Entities.Product as product_entity
 import Entities.Cart as cart_entity
