@@ -13,6 +13,7 @@ from styx.common.stateflow_graph import StateflowGraph
 from Functions.Product import product_operator 
 from Functions.Cart import cart_operator 
 from Functions.Stock import stock_operator 
+from Functions.ProductCartRouter import product_cart_router_operator
 
 import Entities.Product as product_entity
 import Entities.Cart as cart_entity
@@ -59,11 +60,13 @@ async def submit_dataflow_graph(_, n_partitions: int):
     product_operator.set_n_partitions(n_partitions)
     cart_operator.set_n_partitions(n_partitions)
     stock_operator.set_n_partitions(n_partitions)
+    product_cart_router_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
         product_operator,
         cart_operator,
         stock_operator,
+        product_cart_router_operator,
     )
 
     await styx_client.submit_dataflow(

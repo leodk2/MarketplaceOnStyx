@@ -1,5 +1,6 @@
 from confluent_kafka import TIMESTAMP_CREATE_TIME
 from datetime import datetime
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
@@ -86,4 +87,15 @@ async def checkout(
 async def get(ctx: StatefulFunction):
     return ctx.get()
 
+@cart_operator.register
+async def update_cart_price(ctx: StatefulFunction, new_price: float):
+    state = ctx.get()
+    if state is None:
+        raise CartDoesNotExist(f"Error: Cart for customer with id {ctx.key} does not exist")
 
+    for item in state["Items"]:
+        item.Price = new_price
+
+    ctx.put(state)
+
+    return ctx.key
