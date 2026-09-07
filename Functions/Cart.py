@@ -12,7 +12,7 @@ import logging
 logger = logging.Logger(__name__)
 
 OPERATOR_NAME = "cart"
-operator = Operator(OPERATOR_NAME)
+cart_operator = Operator(OPERATOR_NAME)
 
 
 class CheckoutAlreadySent(Exception):
@@ -32,7 +32,7 @@ class CustomerIdMismatch(Exception):
 
 
 # For now we assume that a customer only can have one cart
-@operator.register
+@cart_operator.register
 async def add(ctx: StatefulFunction, cartItem: CartItem):
     if cartItem.Quantity <= 0:
         raise ItemsNegative(f"Error: Item {cartItem.ProductId} shows no positive quantity")
@@ -49,7 +49,7 @@ async def add(ctx: StatefulFunction, cartItem: CartItem):
     return ctx.key
 
 
-@operator.register
+@cart_operator.register
 async def seal(ctx: StatefulFunction):
 
     cart_data: Cart = ctx.get()
@@ -59,7 +59,7 @@ async def seal(ctx: StatefulFunction):
     cart_data.Status = CartStatus.OPEN
 
 
-@operator.register
+@cart_operator.register
 async def checkout(
     ctx: StatefulFunction, customer_id: int, customerCheckout: CustomerCheckout
 ):
@@ -82,7 +82,7 @@ async def checkout(
     ctx.call_remote_async("cart", "seal", ctx.key)
 
 
-@operator.register
+@cart_operator.register
 async def get(ctx: StatefulFunction):
     return ctx.get()
 

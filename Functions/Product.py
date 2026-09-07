@@ -8,7 +8,7 @@ from styx.common.stateful_function import StatefulFunction
 logger = logging.Logger(__name__)
 
 OPERATOR_NAME = "product"
-operator = Operator(OPERATOR_NAME)
+product_operator = Operator(OPERATOR_NAME)
 
 class ProductDoesNotExist(Exception):
     pass
@@ -17,7 +17,7 @@ class ProductAlreadyExists(Exception):
     pass
 
 
-@operator.register
+@product_operator.register
 async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     state = ctx.get()
     if state is not None:
@@ -25,7 +25,7 @@ async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     ctx.put(product)
     return product
 
-@operator.register
+@product_operator.register
 async def replace_product(ctx: StatefulFunction, product) -> Product:
     state = ctx.get()
     if state is None:
@@ -42,7 +42,7 @@ async def replace_product(ctx: StatefulFunction, product) -> Product:
 
     return ctx.get()
 
-@operator.register
+@product_operator.register
 async def update_product_price(ctx: StatefulFunction, new_price: float) -> Product:
     state = ctx.get()
     if state is None:
@@ -51,7 +51,7 @@ async def update_product_price(ctx: StatefulFunction, new_price: float) -> Produ
     ctx.put(state)
     return ctx.get()
 
-@operator.register
+@product_operator.register
 async def get_product(ctx: StatefulFunction) -> Product:
     state = ctx.get()
     if state is None:

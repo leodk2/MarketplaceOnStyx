@@ -5,16 +5,14 @@ from sanic import Blueprint, Sanic
 from sanic import Sanic, json
 from sanic_ext import openapi
 
-from typing import cast
-
 from styx.client import AsyncStyxClient
 from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-import Functions.Product as product
-import Functions.Cart as cart
-import Functions.Stock as stock
+from Functions.Product import product_operator 
+from Functions.Cart import cart_operator 
+from Functions.Stock import stock_operator 
 
 import Entities.Product as product_entity
 import Entities.Cart as cart_entity
@@ -25,11 +23,6 @@ from Entities.Product import Product
 from Entities.StockItem import StockItem
 
 import Requests.CustomerCheckout as customer_checkout_entity
-
-# from functions.order import order_operator
-# from functions.payment import payment_operator
-# from functions.stock import stock_operator
-
 
 APP_NAME = "marketplaceonstyx"
 
@@ -63,14 +56,14 @@ async def submit_dataflow_graph(_, n_partitions: int):
         max_operator_parallelism=n_partitions
     )
 
-    product.operator.set_n_partitions(n_partitions)
-    cart.operator.set_n_partitions(n_partitions)
-    stock.operator.set_n_partitions(n_partitions)
+    product_operator.set_n_partitions(n_partitions)
+    cart_operator.set_n_partitions(n_partitions)
+    stock_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
-        product.operator,
-        cart.operator,
-        stock.operator,
+        product_operator,
+        cart_operator,
+        stock_operator,
     )
 
     await styx_client.submit_dataflow(
@@ -108,7 +101,7 @@ async def create_customer(request):
 @openapi.body(Product, validate=True)
 async def create_product(_, body: Product):
     future = await styx_client.send_event(
-        operator=product.operator,
+        operator=product_operator,
         function="create_product",
         key=body.ProductId,
         params=(body,)
@@ -127,7 +120,7 @@ async def create_product(_, body: Product):
 @openapi.body(Product, validate=True)
 async def update_product_price(_, body: Product):
     future = await styx_client.send_event(
-        operator=product.operator,
+        operator=product_operator,
         function="update_product_price",
         key=body.ProductId,
         params=(body.Price,)
@@ -146,7 +139,7 @@ async def update_product_price(_, body: Product):
 @openapi.body(Product, validate=True)
 async def replace_product(_, body: Product):
     future = await styx_client.send_event(
-        operator=product.operator,
+        operator=product_operator,
         function="replace_product",
         key=body.ProductId,
         params=(body,)
@@ -164,7 +157,7 @@ async def replace_product(_, body: Product):
 @api.get("product/<product_id:int>")
 async def get_product(_, product_id: int):
     future = await styx_client.send_event(
-        operator=product.operator,
+        operator=product_operator,
         key=product_id,
         function="get_product"
     )
@@ -194,7 +187,7 @@ async def deliver_shipment(request, tid):
 @openapi.body(StockItem, validate=True)
 async def create_stock(_, body: StockItem):
     future = await styx_client.send_event(
-        operator=stock.operator,
+        operator=stock_operator,
         key=body.ProductId,
         function="create_stock",
         params=(body,)
@@ -211,7 +204,7 @@ async def create_stock(_, body: StockItem):
 @api.get("stock/<product_id:int>")
 async def get_stock(_, product_id: int):
     future = await styx_client.send_event(
-        operator=stock.operator,
+        operator=stock_operator,
         key=product_id,
         function="get_stock"
     )

@@ -4,7 +4,7 @@ from styx.common.stateful_function import StatefulFunction
 from Entities.StockItem import StockItem
 
 OPERATOR_NAME = "stock"
-operator = Operator(OPERATOR_NAME)
+stock_operator = Operator(OPERATOR_NAME)
 
 
 class StockItemDoesNotExist(Exception):
@@ -13,7 +13,7 @@ class StockItemAlreadyExists(Exception):
     pass
 
 
-@operator.register
+@stock_operator.register
 async def on_product_update(ctx: StatefulFunction, newVersion: str) -> StockItem:
     state = ctx.get()
     if state is None:
@@ -22,7 +22,7 @@ async def on_product_update(ctx: StatefulFunction, newVersion: str) -> StockItem
     ctx.put(state)
     return ctx.get()
 
-@operator.register
+@stock_operator.register
 async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockItem:
     state = ctx.get()
     if state is not None:
@@ -30,7 +30,7 @@ async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockIte
     ctx.put(stock_item)
     return stock_item
 
-@operator.register
+@stock_operator.register
 async def get_stock(ctx: StatefulFunction) -> StockItem:
     state = ctx.get()
     if state is None:
