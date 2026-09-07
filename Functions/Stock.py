@@ -17,7 +17,7 @@ class StockItemAlreadyExists(Exception):
 async def on_product_update(ctx: StatefulFunction, newVersion: str) -> StockItem:
     state = ctx.get()
     if state is None:
-        raise StockItemDoesNotExist(f"StockItem with id {ctx.key} does not exist")
+        raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
     state['Version'] = newVersion
     ctx.put(state)
     return ctx.get()
@@ -26,7 +26,7 @@ async def on_product_update(ctx: StatefulFunction, newVersion: str) -> StockItem
 async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockItem:
     state = ctx.get()
     if state is not None:
-        raise StockItemAlreadyExists(f"StockItem with id {ctx.key} already exists")
+        raise StockItemAlreadyExists(f"Error: StockItem with id {ctx.key} already exists")
     ctx.put(stock_item)
     return stock_item
 
@@ -34,5 +34,5 @@ async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockIte
 async def get_stock(ctx: StatefulFunction) -> StockItem:
     state = ctx.get()
     if state is None:
-        raise StockItemDoesNotExist(f"StockItem with id {ctx.key} does not exist")
+        raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
     return state

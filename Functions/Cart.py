@@ -35,13 +35,13 @@ class CustomerIdMismatch(Exception):
 @operator.register
 async def add(ctx: StatefulFunction, cartItem: CartItem):
     if cartItem.Quantity <= 0:
-        raise ItemsNegative(f"Item {cartItem.ProductId} shows no positive quantity")
+        raise ItemsNegative(f"Error: Item {cartItem.ProductId} shows no positive quantity")
 
     cart_data: Cart = ctx.get()
 
     if cart_data.Status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent(
-            f"Cart with id {ctx.key} for customer {cart_data.CustomerId} has already checked out "
+            f"Error: Cart with id {ctx.key} for customer {cart_data.CustomerId} has already checked out "
         )
 
     cart_data.Items.append(CartItem.model_validate(dict(cartItem)))
@@ -54,7 +54,7 @@ async def seal(ctx: StatefulFunction):
 
     cart_data: Cart = ctx.get()
     if cart_data is None:
-        raise CartDoesNotExist()
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
 
     cart_data.Status = CartStatus.OPEN
 

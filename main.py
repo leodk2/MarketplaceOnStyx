@@ -1,8 +1,11 @@
+from __future__ import annotations
 import os
 
 from sanic import Blueprint, Sanic
 from sanic import Sanic, json
 from sanic_ext import openapi
+
+from typing import cast
 
 from styx.client import AsyncStyxClient
 from styx.client.styx_future import StyxResponse
@@ -50,8 +53,10 @@ styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
 app.add_task(styx_client.open(consume=True))
 
 
-@api.post("/submit/<n_partitions>")
+@api.post("/submit/<n_partitions:int>")
 async def submit_dataflow_graph(_, n_partitions: int):
+    n_partitions = int(n_partitions)
+    
     g = StateflowGraph(
         APP_NAME,
         operator_state_backend=LocalStateBackend.DICT,
@@ -85,7 +90,6 @@ async def submit_dataflow_graph(_, n_partitions: int):
 
 @api.put("cart/<customer_id>/add")
 async def add_to_cart(request, customer_id):
-    
     raise NotImplementedError("This endpoint is not yet implemented.")
 
 @api.post("cart/<customer_id>/checkout")
@@ -100,9 +104,6 @@ async def seal_cart(request, customer_id):
 async def create_customer(request):
     raise NotImplementedError("This endpoint is not yet implemented.")
 
-#TODO: how to return other than 200 
-
-
 @api.post("product")
 @openapi.body(Product, validate=True)
 async def create_product(_, body: Product):
@@ -116,6 +117,9 @@ async def create_product(_, body: Product):
     result: StyxResponse | None = await future.get()
     if result is None:
         return json({"Error": "Failed to create product"}, status=500)
+
+    if is_error(result.response):
+        return json(result.response, status=500)
     
     return json(result.response)
 
@@ -132,7 +136,10 @@ async def update_product_price(_, body: Product):
     result: StyxResponse | None = await future.get()
     if result is None:
         return json({"Error": "Failed to update product price"}, status=500)
-    
+
+    if is_error(result.response):
+        return json(result.response, status=500)
+
     return json(result.response)
 
 @api.put("product")
@@ -143,15 +150,18 @@ async def replace_product(_, body: Product):
         function="replace_product",
         key=body.ProductId,
         params=(body,)
-)
+    )
     
     result: StyxResponse | None = await future.get()
     if result is None:
         return json({"Error": "Failed to update product"}, status=500)
+
+    if is_error(result.response):
+        return json(result.response, status=500)
     
     return json(result.response)
 
-@api.get("product/<product_id>")
+@api.get("product/<product_id:int>")
 async def get_product(_, product_id: int):
     future = await styx_client.send_event(
         operator=product.operator,
@@ -161,6 +171,9 @@ async def get_product(_, product_id: int):
     result: StyxResponse | None = await future.get()
     if result is None:
         return json({"Error": "Failed to get product"}, status=500)
+
+    if is_error(result.response):
+        return json(result.response, status=500)
 
     return json(result.response)
 
@@ -190,9 +203,12 @@ async def create_stock(_, body: StockItem):
     if result is None:
         return json({"Error": "Failed to create stock"}, status=500)
 
+    if is_error(result.response):
+        return json(result.response, status=500)
+
     return json(result.response)
 
-@api.get("stock/<product_id>")
+@api.get("stock/<product_id:int>")
 async def get_stock(_, product_id: int):
     future = await styx_client.send_event(
         operator=stock.operator,
@@ -203,6 +219,9 @@ async def get_stock(_, product_id: int):
     if result is None:
         return json({"Error": "Failed to get stock"}, status=500)
 
+    if is_error(result.response):
+        return json(result.response, status=500)
+    
     return json(result.response)
 
 
@@ -211,3 +230,13 @@ app.blueprint(api)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000, debug=True)
+
+
+
+
+
+def is_error(obj):
+    return isinstance(obj, str) and obj.startswith("Error: ")
+
+
+
