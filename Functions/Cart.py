@@ -35,13 +35,13 @@ async def add_item(ctx: StatefulFunction, item: dict):
 
     cartItem: CartItem = CartItem(**item)
     if cartItem.quantity <= 0:
-        raise ItemsNegative(f"Item {cartItem.productId} shows no positive quantity")
+       raise ItemsNegative(f"Error: Item {cartItem.ProductId} shows no positive quantity")
 
     cart_data: Cart = ctx.get()
 
     if cart_data.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent(
-            f"Cart with id {ctx.key} for customer {cart_data.customerId} has already checked out "
+            f"Error: Cart with id {ctx.key} for customer {cart_data.CustomerId} has already checked out "
         )
 
     cart_data.items.append(cartItem)
@@ -52,6 +52,8 @@ async def add_item(ctx: StatefulFunction, item: dict):
 @cart_operator.register
 async def seal(ctx: StatefulFunction):
     cart_data: Cart = ctx.get()
+    if cart_data is None:
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
     doSeal(cart_data)
     return cart_data.customerId
 

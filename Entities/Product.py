@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
-
-class Product(BaseModel):
+@dataclass
+class Product:
     SellerId: int
     ProductId: int
+    Price: float
+    FreightValue: float
+    Version: str
     Name: str = ""
     Sku: str = ""
     Category: str = ""
     Description: str = ""
-    Price: float
-    FreightValue: float
     Status: str = "approved"
-    Version: str
