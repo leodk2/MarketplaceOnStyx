@@ -12,17 +12,14 @@ from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-from Entities.Customer import Customer
-from Functions.Cart import cart_operator
-from Functions.Customer import customer_operator
-from Functions.Order import order_operator
-from Functions.Payment import payment_operator
-from Functions.Seller import seller_operator
-from Functions.Stock import stock_operator
-# from Functions.Product import product_operator
-from Functions.Product import product_operator 
-from Functions.Cart import cart_operator 
-from Functions.Stock import stock_operator 
+from Operators.Customer import customer_operator
+from Operators.Order import order_operator
+from Operators.Payment import payment_operator
+from Operators.Seller import seller_operator
+from Operators.Product import product_operator 
+from Operators.Cart import cart_operator 
+from Operators.Stock import stock_operator 
+from Operators.ProductCartRouter import product_cart_router_operator
 
 import Entities.Product as product_entity
 import Entities.Cart as cart_entity
@@ -31,6 +28,7 @@ import Entities.CartStatus as cart_status_entity
 import Entities.StockItem as stock_item_entity
 from Entities.Product import Product
 from Entities.StockItem import StockItem
+from Entities.Customer import Customer
 
 import Requests.CustomerCheckout as customer_checkout_entity
 
@@ -69,11 +67,21 @@ async def submit_dataflow_graph(_, n_partitions: int):
     product_operator.set_n_partitions(n_partitions)
     cart_operator.set_n_partitions(n_partitions)
     stock_operator.set_n_partitions(n_partitions)
+    product_cart_router_operator.set_n_partitions(n_partitions)
+    payment_operator.set_n_partitions(n_partitions)
+    order_operator.set_n_partitions(n_partitions)
+    seller_operator.set_n_partitions(n_partitions)
+    customer_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
         product_operator,
         cart_operator,
         stock_operator,
+        product_cart_router_operator,
+        payment_operator,
+        order_operator,
+        seller_operator,
+        customer_operator,
     )
 
     await styx_client.submit_dataflow(

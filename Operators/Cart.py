@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
@@ -35,14 +36,21 @@ async def add_item(ctx: StatefulFunction, item: dict):
 
     cartItem: CartItem = CartItem(**item)
     if cartItem.quantity <= 0:
-       raise ItemsNegative(f"Error: Item {cartItem.ProductId} shows no positive quantity")
+       raise ItemsNegative(f"Error: Item {cartItem.productId} shows no positive quantity")
 
     cart_data: Cart = ctx.get()
 
     if cart_data.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent(
-            f"Error: Cart with id {ctx.key} for customer {cart_data.CustomerId} has already checked out "
+            f"Error: Cart with id {ctx.key} for customer {cart_data.customerId} has already checked out "
         )
+
+    ctx.call_remote_async(
+        operator_name="product_cart_router",
+        key=cartItem.productId,
+        function_name="register",
+        params=(ctx.key,),
+    )
 
     cart_data.items.append(cartItem)
 
@@ -97,3 +105,16 @@ async def get(ctx: StatefulFunction):
     if data is None:
         raise CartDoesNotExist()
     return data
+
+@cart_operator.register
+async def update_cart_price(ctx: StatefulFunction, new_price: float):
+    state = ctx.get()
+    if state is None:
+        raise CartDoesNotExist(f"Error: Cart for customer with id {ctx.key} does not exist")
+
+    for item in state["Items"]:
+        item.Price = new_price
+
+    ctx.put(state)
+
+    return ctx.key
