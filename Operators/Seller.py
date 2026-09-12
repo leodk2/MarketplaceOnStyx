@@ -76,8 +76,8 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     ctx.put(asdict(state))
 
 
-@seller_operator.register
-async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+@seller_operator.register #TODO: how do we implement this
+async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerState(**(ctx.get()))
     notif = ShipmentNotification(**notif_dict)
 
