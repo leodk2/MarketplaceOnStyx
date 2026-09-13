@@ -1,36 +1,32 @@
 from __future__ import annotations
+
 import os
 from typing import cast
 
+from pydantic import TypeAdapter
 from sanic import Blueprint, Request, Sanic, json, text
-from sanic import Blueprint, Sanic
-from sanic import Sanic, json
 from sanic_ext import openapi
-
 from styx.client import AsyncStyxClient
 from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-from Operators.Customer import customer_operator
-from Operators.Order import order_operator
-from Operators.Payment import payment_operator
-from Operators.Seller import seller_operator
-from Operators.Product import product_operator 
-from Operators.Cart import cart_operator 
-from Operators.Stock import stock_operator 
-from Operators.ProductCartRouter import product_cart_router_operator
-
-import Entities.Product as product_entity
 import Entities.Cart as cart_entity
 import Entities.CartItem as cart_item_entity
 import Entities.CartStatus as cart_status_entity
+import Entities.Customer as customer_entity
+import Entities.Product as product_entity
+import Entities.Seller as seller_entity
 import Entities.StockItem as stock_item_entity
-from Entities.Product import Product
-from Entities.StockItem import StockItem
-from Entities.Customer import Customer
-
 import Requests.CustomerCheckout as customer_checkout_entity
+from Operators.Cart import cart_operator
+from Operators.Customer import customer_operator
+from Operators.Order import order_operator
+from Operators.Payment import payment_operator
+from Operators.Product import product_operator
+from Operators.ProductCartRouter import product_cart_router_operator
+from Operators.Seller import seller_operator
+from Operators.Stock import stock_operator
 
 APP_NAME = "marketplaceonstyx"
 
@@ -50,14 +46,36 @@ STYX_PORT: int = int(os.environ["STYX_PORT"])
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 
 styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
+STOCK_ITEM_ADAPTER = TypeAdapter(stock_item_entity.StockItem)
 
 app.add_task(styx_client.open(consume=True))
+
+
+def is_error(obj):
+    return isinstance(obj, str) and obj.casefold().startswith("error:")
+
+
+def create_response(result: StyxResponse | None, failure_message: str):
+    if result is None:
+        return json({"Error": failure_message}, status=500)
+
+    if is_error(result.response):
+        return json(result.response, status=500)
+
+    return json(result.response)
+
+
+def validate_stock_item(*, data, handler_kwargs, **_):
+    try:
+        handler_kwargs["body"] = STOCK_ITEM_ADAPTER.validate_python(data)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(str(exc)) from exc
 
 
 @api.post("/submit/<n_partitions:int>")
 async def submit_dataflow_graph(_, n_partitions: int):
     n_partitions = int(n_partitions)
-    
+
     g = StateflowGraph(
         APP_NAME,
         operator_state_backend=LocalStateBackend.DICT,
@@ -93,15 +111,16 @@ async def submit_dataflow_graph(_, n_partitions: int):
             cart_status_entity,
             customer_checkout_entity,
             stock_item_entity,
+            customer_entity,
         ),
     )
     return json({"Graph submitted": True})
 
 
 @api.put("cart/<customer_id>/add")
-async def add_to_cart(request: Request, customer_id):
-    ci = request.json.get("item")  # name subject to change
-    req = await styx_client.send_event(cart_operator, customer_id, "add_item", (ci,))
+@openapi.body(cart_item_entity.CartItem, validate=True)
+async def add_to_cart(_, customer_id, body: cart_item_entity.CartItem):
+    req = await styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
     res = cast(StyxResponse, await req.get())
     return text(
         f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
@@ -133,44 +152,43 @@ async def seal_cart(request: Request, customer_id):
 
 
 @api.post("customer")
-async def create_customer(request: Request):
-    customer = Customer(**(request.json.get("customer")))
-    req = await styx_client.send_event(
-        customer_operator, customer.Id, "register_customer", (customer,)
+@openapi.body(customer_entity.Customer, validate=True)
+async def create_customer(_, body: customer_entity.Customer):
+    future = await styx_client.send_event(
+        operator=customer_operator,
+        key=body.Id,
+        function="register_customer",
+        params=(body,),
     )
-    res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
+    result: StyxResponse | None = await future.get()
+    return create_response(
+        result,
+        "Failed to create customer",
     )
 
 
 @api.post("product")
-@openapi.body(Product, validate=True)
-async def create_product(_, body: Product):
+@openapi.body(product_entity.Product, validate=True)
+async def create_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="create_product",
         key=body.ProductId,
-        params=(body,)
+        params=(body,),
     )
 
     result: StyxResponse | None = await future.get()
-    if result is None:
-        return json({"Error": "Failed to create product"}, status=500)
+    return create_response(result, "Failed to create product")
 
-    if is_error(result.response):
-        return json(result.response, status=500)
-    
-    return json(result.response)
 
 @api.patch("product")
-@openapi.body(Product, validate=True)
-async def update_product_price(_, body: Product):
+@openapi.body(product_entity.Product, validate=True)
+async def update_product_price(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="update_product_price",
         key=body.ProductId,
-        params=(body.Price,)
+        params=(body.Price,),
     )
 
     result: StyxResponse | None = await future.get()
@@ -184,30 +202,29 @@ async def update_product_price(_, body: Product):
 
 
 @api.put("product")
-@openapi.body(Product, validate=True)
-async def replace_product(_, body: Product):
+@openapi.body(product_entity.Product, validate=True)
+async def replace_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="replace_product",
         key=body.ProductId,
-        params=(body,)
+        params=(body,),
     )
-    
+
     result: StyxResponse | None = await future.get()
     if result is None:
         return json({"Error": "Failed to update product"}, status=500)
 
     if is_error(result.response):
         return json(result.response, status=500)
-    
+
     return json(result.response)
+
 
 @api.get("product/<product_id:int>")
 async def get_product(_, product_id: int):
     future = await styx_client.send_event(
-        operator=product_operator,
-        key=product_id,
-        function="get_product"
+        operator=product_operator, key=product_id, function="get_product"
     )
     result: StyxResponse | None = await future.get()
     if result is None:
@@ -220,15 +237,16 @@ async def get_product(_, product_id: int):
 
 
 @api.post("seller")
-async def create_seller(request: Request):
-    seller = request.json.get("seller")
-    req = await styx_client.send_event(
-        seller_operator, seller.Id, "register_seller", (seller,)
+@openapi.body(seller_entity.Seller, validate=True)
+async def create_seller(_, body: seller_entity.Seller):
+    future = await styx_client.send_event(
+        operator=seller_operator,
+        key=body.Id,
+        function="register_seller",
+        params=(body,),
     )
-    res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
-    )
+    result: StyxResponse | None = await future.get()
+    return create_response(result, "Failed to create seller")
 
 
 @api.get("seller/dashboard/<seller_id>")
@@ -242,29 +260,22 @@ async def deliver_shipment(request, tid):
 
 
 @api.post("stock")
-@openapi.body(StockItem, validate=True)
-async def create_stock(_, body: StockItem):
+@openapi.body(stock_item_entity.StockItem, validate=validate_stock_item)
+async def create_stock(_, body: stock_item_entity.StockItem):
     future = await styx_client.send_event(
         operator=stock_operator,
-        key=body.ProductId,
+        key=f"{body.seller_id}:{body.product_id}",
         function="create_stock",
-        params=(body,)
+        params=(body,),
     )
     result: StyxResponse | None = await future.get()
-    if result is None:
-        return json({"Error": "Failed to create stock"}, status=500)
+    return create_response(result, "Failed to create stock")
 
-    if is_error(result.response):
-        return json(result.response, status=500)
-
-    return json(result.response)
 
 @api.get("stock/<product_id:int>")
 async def get_stock(_, product_id: int):
     future = await styx_client.send_event(
-        operator=stock_operator,
-        key=product_id,
-        function="get_stock"
+        operator=stock_operator, key=product_id, function="get_stock"
     )
     result: StyxResponse | None = await future.get()
     if result is None:
@@ -272,7 +283,7 @@ async def get_stock(_, product_id: int):
 
     if is_error(result.response):
         return json(result.response, status=500)
-    
+
     return json(result.response)
 
 
@@ -281,13 +292,3 @@ app.blueprint(api)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
-
-
-def is_error(obj):
-    return isinstance(obj, str) and obj.startswith("Error: ")
-
-
-
