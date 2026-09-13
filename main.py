@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict, is_dataclass
+from datetime import datetime
+from enum import Enum
+from importlib import import_module
+from pkgutil import iter_modules
 from typing import cast
 
-from pydantic import TypeAdapter
 from sanic import Blueprint, Request, Sanic, json, text
 from sanic_ext import openapi
 from styx.client import AsyncStyxClient
@@ -11,14 +15,14 @@ from styx.client.styx_future import StyxResponse
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
-import Entities.Cart as cart_entity
+import Entities
 import Entities.CartItem as cart_item_entity
-import Entities.CartStatus as cart_status_entity
 import Entities.Customer as customer_entity
 import Entities.Product as product_entity
 import Entities.Seller as seller_entity
 import Entities.StockItem as stock_item_entity
-import Requests.CustomerCheckout as customer_checkout_entity
+import Requests
+import States
 from Operators.Cart import cart_operator
 from Operators.Customer import customer_operator
 from Operators.Order import order_operator
@@ -46,13 +50,32 @@ STYX_PORT: int = int(os.environ["STYX_PORT"])
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 
 styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
-STOCK_ITEM_ADAPTER = TypeAdapter(stock_item_entity.StockItem)
+APPLICATION_MODULES = tuple(
+    import_module(module.name)
+    for package in (Entities, Requests, States)
+    for module in iter_modules(package.__path__, f"{package.__name__}.")
+)
+
 
 app.add_task(styx_client.open(consume=True))
 
 
 def is_error(obj):
     return isinstance(obj, str) and obj.casefold().startswith("error:")
+
+
+def jsonable(value):
+    if is_dataclass(value):
+        return jsonable(asdict(value))
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return jsonable(value.value)
+    if isinstance(value, dict):
+        return {key: jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [jsonable(item) for item in value]
+    return value
 
 
 def create_response(result: StyxResponse | None, failure_message: str):
@@ -62,14 +85,7 @@ def create_response(result: StyxResponse | None, failure_message: str):
     if is_error(result.response):
         return json(result.response, status=500)
 
-    return json(result.response)
-
-
-def validate_stock_item(*, data, handler_kwargs, **_):
-    try:
-        handler_kwargs["body"] = STOCK_ITEM_ADAPTER.validate_python(data)
-    except (TypeError, ValueError) as exc:
-        raise TypeError(str(exc)) from exc
+    return json(jsonable(result.response))
 
 
 @api.post("/submit/<n_partitions:int>")
@@ -104,15 +120,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
 
     await styx_client.submit_dataflow(
         g,
-        external_modules=(
-            product_entity,
-            cart_entity,
-            cart_item_entity,
-            cart_status_entity,
-            customer_checkout_entity,
-            stock_item_entity,
-            customer_entity,
-        ),
+        external_modules=APPLICATION_MODULES,
     )
     return json({"Graph submitted": True})
 
@@ -260,7 +268,7 @@ async def deliver_shipment(request, tid):
 
 
 @api.post("stock")
-@openapi.body(stock_item_entity.StockItem, validate=validate_stock_item)
+@openapi.body(stock_item_entity.StockItem, validate=True)
 async def create_stock(_, body: stock_item_entity.StockItem):
     future = await styx_client.send_event(
         operator=stock_operator,
@@ -272,10 +280,10 @@ async def create_stock(_, body: stock_item_entity.StockItem):
     return create_response(result, "Failed to create stock")
 
 
-@api.get("stock/<product_id:int>")
-async def get_stock(_, product_id: int):
+@api.get("stock/<seller_id:int>/<product_id:int>")
+async def get_stock(_, seller_id: int, product_id: int):
     future = await styx_client.send_event(
-        operator=stock_operator, key=product_id, function="get_stock"
+        operator=stock_operator, key=f"{seller_id}:{product_id}", function="get_stock"
     )
     result: StyxResponse | None = await future.get()
     if result is None:
