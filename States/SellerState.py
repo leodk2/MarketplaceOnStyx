@@ -3,11 +3,18 @@ from datetime import date
 
 from Entities.Order import OrderStatus
 from Entities.Packages import PackageStatus
+from Entities.Seller import Seller
+
+
+@dataclass(init=True)
+class SellerCompositeState:
+    seller_entity: Seller
+    state: SellerState
 
 
 @dataclass
 class SellerState:
-    order_entries: dict[str, list["OrderEntry"]] = field(default_factory=dict)
+    order_entries: dict[str, list[OrderEntry]] = field(default_factory=dict)
     messagesReorderError: set[str] = field(default_factory=set)
 
 
