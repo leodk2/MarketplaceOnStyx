@@ -1,5 +1,4 @@
 from __future__ import annotations
-from subprocess import CREATE_NEW_PROCESS_GROUP
 
 import os
 from dataclasses import asdict, is_dataclass
