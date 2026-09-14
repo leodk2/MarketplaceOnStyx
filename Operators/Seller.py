@@ -109,3 +109,29 @@ async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
 
 
     
+@seller_operator.register
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+    state = SellerCompositeState(**(ctx.get()))
+    notif = ShipmentNotification(**notif_dict)
+
+    id = f"{notif.customer_id}-{notif.order_id}"
+    entries = state.state.order_entries.get(id)
+    if entries is None:
+        state.state.messagesReorderError.add(id)
+        ctx.put(asdict(state))
+        return ctx.key  # TODO what to return here?
+
+    for entry in entries:
+        if notif.shipment_status is ShipmentStatus.APPROVED:
+            entry.order_status = OrderStatus.READY_FOR_SHIPMENT
+            entry.shipment_date = notif.event_date
+            entry.delivery_status = PackageStatus.READY_TO_SHIP
+        elif notif.shipment_status is ShipmentStatus.DELIVERY_IN_PROGRESS:
+            entry.order_status = OrderStatus.IN_TRANSIT
+            entry.delivery_status = PackageStatus.SHIPPED
+        elif notif.shipment_status is ShipmentStatus.CONCLUDED:
+            entry.order_status = OrderStatus.DELIVERED
+
+    if notif.shipment_status is ShipmentStatus.CONCLUDED:
+        state.state.order_entries.pop(id)
+    ctx.put(asdict(state))

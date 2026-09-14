@@ -69,12 +69,17 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
 
     seller_ids = {oi.sellerId for oi in payment.items}
     for seller_id in seller_ids:
-        ctx.call_remote_async("seller", "shipment_notification", seller_id, (notif,))
+        ctx.call_remote_async(
+            "seller", 
+            "shipment_notification", 
+            seller_id, 
+            (notif,)
+        )
 
     ctx.call_remote_async(
         "order", 
         "shipment_notification", 
-        payment.order_id, 
+        payment.customer_checkout.customerId, 
         (notif,)
     )
     # TODO transaction mark/egress message?
