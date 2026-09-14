@@ -15,7 +15,7 @@ from Requests.CustomerCheckout import (
     PaymentStockEvent,
 )
 
-payment_operator = Operator("payment", 4)
+payment_operator = Operator("payment", 4)  # keyed by order_id
 
 
 @payment_operator.register
@@ -30,7 +30,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     seq: int = 1
     is_credit_card: bool = customer_checkout.paymentType is PaymentType.CREDIT_CARD.name
 
-    order_payments: list[OrderPayment] = []  # noqa: F821
+    order_payments: list[OrderPayment] = []
     card: OrderPaymentCard
 
     if is_credit_card or (customer_checkout.paymentType is PaymentType.DEBIT_CARD.name):

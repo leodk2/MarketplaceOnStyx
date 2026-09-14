@@ -1,3 +1,5 @@
+import itertools
+from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from dataclasses import asdict
 from logging import getLogger
 
@@ -13,23 +15,30 @@ from Requests.CustomerCheckout import (
     PaymentNotification,
     ShipmentNotification,
 )
-from States.SellerState import OrderEntry, SellerState
+from States.SellerState import OrderEntry, SellerCompositeState, SellerState
 
 seller_operator = Operator("seller", 4)
 
 logger = getLogger(__name__)
 
 
+class SellerExistsError(Exception):
+    pass
+
+
 @seller_operator.register
 async def register_seller(ctx: StatefulFunction, seller):
-    ctx.put(seller)
+    if ctx.get() is not None:
+        raise SellerExistsError("error: seller already exists")
+    state = SellerCompositeState(seller, SellerState())
+    ctx.put(state)
     return ctx.key
 
 
 @seller_operator.register
 async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     invoice = InvoiceIssued(**invoice_dict)
-    state = SellerState(**(ctx.get()))
+    state = SellerCompositeState(**(ctx.get())).state
 
     order_items = invoice.items
     seller_id = ctx.key
@@ -63,12 +72,12 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
 @seller_operator.register
 async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentNotification(**payment_dict)
-    state = SellerState(**(ctx.get()))
+    state = SellerCompositeState(**(ctx.get()))
 
     id = f"{payment.customer_id}-{payment.order_id}"
-    entries = state.order_entries.get(id)
+    entries = state.state.order_entries.get(id)
     if entries is None:
-        state.messagesReorderError.add(id)
+        state.state.messagesReorderError.add(id)
         ctx.put(state)
         return ctx.key
 
@@ -79,13 +88,12 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 @seller_operator.register
 async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
-    state = SellerState(**(ctx.get()))
+    state = SellerCompositeState(**(ctx.get()))
     notif = DeliveryNotification(**notif_dict)
     id = f"{notif.customer_id}-{notif.order_id}"
-
-    entries = state.order_entries.get(id)
+    entries = state.state.order_entries.get(id)
     if entries is None:
-        state.messagesReorderError.add(id)
+        state.state.messagesReorderError.add(id)
         ctx.put(asdict(state))
         return ctx.key 
 
