@@ -1,5 +1,5 @@
 import itertools
-from Entities.SellerDashboard import OrderSellerView
+from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from dataclasses import asdict
 from logging import getLogger
 
@@ -119,7 +119,8 @@ async def get_dashboard(ctx: StatefulFunction):
     # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
     # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
     # return those aggregations.
-    state = SellerState(**ctx.get())
+    state = SellerCompositeState(**ctx.get()).state
+
     order_entries = list(
         itertools.chain.from_iterable([oe for oe in state.order_entries.values()])
     )
@@ -135,7 +136,9 @@ async def get_dashboard(ctx: StatefulFunction):
             sum(oe.total_items for oe in order_entries),
         )
 
-        # where to write the data?
-        return {"sellerView": seller_view, "orderEntries": order_entries}
+        dashboard = SellerDashboard(seller_view, order_entries)
+
+        # TODO where to write the data?
+        return asdict(dashboard)
 
     return {}
