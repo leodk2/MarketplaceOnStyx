@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
@@ -31,6 +31,7 @@ from Operators.Product import product_operator
 from Operators.ProductCartRouter import product_cart_router_operator
 from Operators.Seller import seller_operator
 from Operators.Stock import stock_operator
+from Operators.Shipment import shipment_operator
 
 APP_NAME = "marketplaceonstyx"
 
@@ -106,6 +107,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
     order_operator.set_n_partitions(n_partitions)
     seller_operator.set_n_partitions(n_partitions)
     customer_operator.set_n_partitions(n_partitions)
+    shipment_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
         product_operator,
@@ -266,8 +268,15 @@ async def get_seller_dashboard(request, seller_id: int):
 
 
 @api.patch("shipment/<tid>")
-async def deliver_shipment(request, tid):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def deliver_shipment(_, tid):
+    future = await styx_client.send_event(
+        shipment_operator,
+        tid,
+        "deliver_shipment",
+    )
+    result: StyxResponse | None = await future.get()
+
+    return create_response(result, "Could not deliver shipment")
 
 
 @api.post("stock")

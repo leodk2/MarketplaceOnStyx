@@ -9,13 +9,13 @@ from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from States.ShipmentState import ShipmentState
 from Requests.DeliveryNotification import DeliveryNotification
 
-shipment = Operator("shipment", 4)  # keyed by order_id
+shipment_operator = Operator("shipment", 4)  # keyed by order_id
 
 class ShipmentDoesNotExist(Exception):
     pass
 
 
-@shipment.register
+@shipment_operator.register
 async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentConfirmed(**payment_dict)
     now = datetime.now()
@@ -85,18 +85,18 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     # TODO transaction mark/egress message?
 
 
-@shipment.register
+@shipment_operator.register
 async def deliver_shipment(ctx: StatefulFunction):
     state = ctx.get()
     if state is None:
         raise ShipmentDoesNotExist("Error: No shipments registered")
 
     shipment_state = ShipmentState(**(state.get("state", {})))
-    oldest_shipments = get_ten_oldest_unconcluded_shipments(shipment_state)
+    shipments_to_deliver = get_ten_oldest_unconcluded_shipments(shipment_state) # TODO: What shipments to deliver??
 
     now = datetime.now()
 
-    for shipment_obj in oldest_shipments:
+    for shipment_obj in shipments_to_deliver:
         shipment_packages = shipment_state.packages.get(shipment_obj.shipment_id, [])
         for package in shipment_packages:
             await deliver_package(ctx, package, now, shipment_obj)
