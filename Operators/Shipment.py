@@ -8,7 +8,7 @@ from Entities.Shipment import Shipment, ShipmentStatus
 from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from States.ShipmentState import ShipmentState
 
-shipment = Operator("shipment", 4)
+shipment = Operator("shipment", 4)  # keyed by order_id
 
 
 @shipment.register

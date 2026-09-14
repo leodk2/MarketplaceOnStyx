@@ -253,9 +253,16 @@ async def create_seller(_, body: seller_entity.Seller):
     return create_response(result, "Failed to create seller")
 
 
-@api.get("seller/dashboard/<seller_id>")
-async def get_seller_dashboard(request, seller_id):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+@api.get("seller/dashboard/<seller_id:int>")
+async def get_seller_dashboard(request, seller_id: int):
+    future = await styx_client.send_event(
+        seller_operator,
+        seller_id,
+        "get_dashboard",
+    )
+    result: StyxResponse | None = await future.get()
+
+    return create_response(result, "Could not get dashboard")
 
 
 @api.patch("shipment/<tid>")
