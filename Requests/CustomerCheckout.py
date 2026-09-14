@@ -99,3 +99,4 @@ class ShipmentNotification:
     shipment_status: ShipmentStatus
     event_date: datetime
     customer_id: int
+

@@ -3,6 +3,7 @@ from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from dataclasses import asdict
 from logging import getLogger
 
+from Requests.DeliveryNotification import DeliveryNotification
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
@@ -78,13 +79,36 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(state)
-        return ctx.key  # TODO what to return here?
+        return ctx.key
 
     for entry in entries:
         entry.order_status = OrderStatus.PAYMENT_PROCESSED
     ctx.put(asdict(state))
 
 
+@seller_operator.register
+async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
+    state = SellerCompositeState(**(ctx.get()))
+    notif = DeliveryNotification(**notif_dict)
+    id = f"{notif.customer_id}-{notif.order_id}"
+    entries = state.state.order_entries.get(id)
+    if entries is None:
+        state.state.messagesReorderError.add(id)
+        ctx.put(asdict(state))
+        return ctx.key 
+
+    target_entry = next((entry for entry in entries if entry.product_id == notif.product_id), None)
+
+    if (target_entry is not None):
+        target_entry.delivery_status = notif.package_status
+        target_entry.delivery_date = notif.delivery_date
+        target_entry.package_id = notif.package_id
+
+    ctx.put(asdict(state))
+
+
+
+    
 @seller_operator.register
 async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerCompositeState(**(ctx.get()))
