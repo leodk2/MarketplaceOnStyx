@@ -94,7 +94,7 @@ async def deliver_shipment(ctx: StatefulFunction):
         shipment_packages = shipment_state.packages.get(shipment_obj.shipment_id, [])
         for package in shipment_packages:
             await deliver_package(ctx, package, now, shipment_obj)
-        await deliver_order(ctx, shipment_obj, shipment_packages)
+        await deliver_order(ctx, shipment_obj, shipment_packages, now)
 
     ctx.put({**state, "state": shipment_state})
     
@@ -132,7 +132,7 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
     )
         
 
-async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_packages: list):
+async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_packages: list, now: datetime):
     if (all(package.package_status == PackageStatus.DELIVERED for package in shipment_packages)):
         shipment_obj.status = ShipmentStatus.CONCLUDED
         ctx.call_remote_async(
@@ -143,7 +143,7 @@ async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_
                 ShipmentNotification(
                     shipment_obj.order_id,
                     ShipmentStatus.CONCLUDED,
-                    datetime.now(),
+                    now,
                     shipment_obj.customer_id,
                 ),
             )
