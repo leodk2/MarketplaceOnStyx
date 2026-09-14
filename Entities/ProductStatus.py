@@ -1,8 +1,10 @@
+from dataclasses import dataclass
+
 from Entities.ItemStatus import ItemStatus
-from pydantic import BaseModel
 
 
-class ProductStatus(BaseModel):
+@dataclass
+class ProductStatus:
     Id: int
     Status: ItemStatus
     UnitPrice: float = 0
