@@ -130,9 +130,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
 async def add_to_cart(_, customer_id, body: cart_item_entity.CartItem):
     req = await styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
     res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
-    )
+    return create_response(res, "Failed to add item to cart " + customer_id)
 
 
 @api.post("cart/<customer_id>/checkout")
@@ -143,9 +141,7 @@ async def checkout_cart(request: Request, customer_id):
         cart_operator, customer_id, "checkout", (customer_id, checkout_request)
     )
     res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
-    )
+    return create_response(res, "Failed to checkout customer " + customer_id)
 
 
 @api.post("cart/<customer_id>/seal")
