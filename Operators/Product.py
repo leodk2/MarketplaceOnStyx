@@ -30,7 +30,7 @@ async def replace_product(ctx: StatefulFunction, product) -> Product:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
-
+    
     ctx.call_remote_async(
         function_name="on_product_update",
         operator_name="stock",

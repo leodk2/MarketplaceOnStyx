@@ -7,6 +7,7 @@ from Entities.Packages import Package, PackageStatus
 from Entities.Shipment import Shipment, ShipmentStatus
 from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from States.ShipmentState import ShipmentState
+from Requests.DeliveryNotification import DeliveryNotification
 
 shipment = Operator("shipment", 4)
 
@@ -115,14 +116,16 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
         "handle_delivery_notification",
         package.seller_id,
         (
-            {
-                "order_id": package.order_id,
-                "shipment_id": package.shipment_id,
-                "package_id": package.package_id,
-                "product_id": package.product_id,
-                "status": PackageStatus.DELIVERED.name,
-                "event_date": now.isoformat(),
-            },
+           DeliveryNotification(
+                order_id=package.order_id,
+                customer_id=shipment_obj.customer_id,
+                package_id=package.package_id,
+                seller_id=package.seller_id,
+                product_id=package.product_id,
+                product_name=package.product_name,
+                package_status=PackageStatus.DELIVERED,
+                delivery_date=now
+            ),
         )
     )
     ctx.call_remote_async(

@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from logging import getLogger
 
+from Requests.DeliveryNotification import DeliveryNotification
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
@@ -69,36 +70,34 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     if entries is None:
         state.messagesReorderError.add(id)
         ctx.put(state)
-        return ctx.key  # TODO what to return here?
+        return ctx.key
 
     for entry in entries:
         entry.order_status = OrderStatus.PAYMENT_PROCESSED
     ctx.put(asdict(state))
 
 
-@seller_operator.register #TODO: how do we implement this
+@seller_operator.register
 async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerState(**(ctx.get()))
-    notif = ShipmentNotification(**notif_dict)
-
+    notif = DeliveryNotification(**notif_dict)
     id = f"{notif.customer_id}-{notif.order_id}"
+
     entries = state.order_entries.get(id)
     if entries is None:
         state.messagesReorderError.add(id)
         ctx.put(asdict(state))
-        return ctx.key  # TODO what to return here?
+        return ctx.key 
 
-    for entry in entries:
-        if notif.shipment_status is ShipmentStatus.APPROVED:
-            entry.order_status = OrderStatus.READY_FOR_SHIPMENT
-            entry.shipment_date = notif.event_date
-            entry.delivery_status = PackageStatus.READY_TO_SHIP
-        elif notif.shipment_status is ShipmentStatus.DELIVERY_IN_PROGRESS:
-            entry.order_status = OrderStatus.IN_TRANSIT
-            entry.delivery_status = PackageStatus.SHIPPED
-        elif notif.shipment_status is ShipmentStatus.CONCLUDED:
-            entry.order_status = OrderStatus.DELIVERED
+    target_entry = next((entry for entry in entries if entry.product_id == notif.product_id), None)
 
-    if notif.shipment_status is ShipmentStatus.CONCLUDED:
-        state.order_entries.pop(id)
+    if (target_entry is not None):
+        target_entry.delivery_status = notif.package_status
+        target_entry.delivery_date = notif.delivery_date
+        target_entry.package_id = notif.package_id
+
     ctx.put(asdict(state))
+
+
+
+    
