@@ -135,3 +135,34 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     if notif.shipment_status is ShipmentStatus.CONCLUDED:
         state.state.order_entries.pop(id)
     ctx.put(asdict(state))
+
+
+@seller_operator.register
+async def get_dashboard(ctx: StatefulFunction):
+    # call shipment to get notifications that is still ongoing
+    # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
+    # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
+    # return those aggregations.
+    state = SellerCompositeState(**ctx.get()).state
+
+    order_entries = list(
+        itertools.chain.from_iterable([oe for oe in state.order_entries.values()])
+    )
+    if len(state.order_entries) > 0:
+        seller_view = OrderSellerView(
+            ctx.key,
+            len(state.order_entries),
+            len(order_entries),
+            sum(oe.total_amount for oe in order_entries),
+            sum(oe.freight_value for oe in order_entries),
+            sum(oe.total_incentive for oe in order_entries),
+            sum(oe.total_invoice for oe in order_entries),
+            sum(oe.total_items for oe in order_entries),
+        )
+
+        dashboard = SellerDashboard(seller_view, order_entries)
+
+        # TODO where to write the data?
+        return asdict(dashboard)
+
+    return {}
