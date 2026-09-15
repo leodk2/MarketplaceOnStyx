@@ -166,3 +166,9 @@ async def get_dashboard(ctx: StatefulFunction):
         return asdict(dashboard)
 
     return {}
+
+
+
+@seller_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data

@@ -118,6 +118,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
         order_operator,
         seller_operator,
         customer_operator,
+        shipment_operator,
     )
 
     await styx_client.submit_dataflow(
@@ -311,6 +312,87 @@ async def get_stock(_, seller_id: int, product_id: int):
         return json(result.response, status=500)
 
     return json(result.response)
+
+
+# this only works with one partition, but it's useful for debugging and testing
+@api.get("allState")
+async def get_all_state(_):
+    future = await styx_client.send_event(
+        operator=cart_operator, key="all", function="get_all_state"
+    )
+    cart_result: StyxResponse | None = await future.get()
+    if cart_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=customer_operator, key="all", function="get_all_state"
+    )
+    customer_result: StyxResponse | None = await future.get()
+    if customer_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=order_operator, key="all", function="get_all_state"
+    )
+    order_result: StyxResponse | None = await future.get()
+    if order_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=payment_operator, key="all", function="get_all_state"
+    )
+    payment_result: StyxResponse | None = await future.get()
+    if payment_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=product_operator, key="all", function="get_all_state"
+    )
+    product_result: StyxResponse | None = await future.get()
+    if product_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=product_cart_router_operator, key="all", function="get_all_state"
+    )
+    product_cart_router_result: StyxResponse | None = await future.get()
+    if product_cart_router_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=seller_operator, key="all", function="get_all_state"
+    )
+    seller_result: StyxResponse | None = await future.get()
+    if seller_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    future = await styx_client.send_event(
+        operator=shipment_operator, key="all", function="get_all_state"
+    )
+    shipment_result: StyxResponse | None = await future.get()
+    if shipment_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+    
+    future = await styx_client.send_event(
+        operator=stock_operator, key="all", function="get_all_state"
+    )
+    stock_result: StyxResponse | None = await future.get()
+    if stock_result is None:
+        return json({"Error": "Failed to get all state"}, status=500)
+
+    result: dict = {
+        "cart": cart_result.response,
+        "customer": customer_result.response,
+        "order": order_result.response,
+        "payment": payment_result.response,
+        "product": product_result.response,
+        "product_cart_router": product_cart_router_result.response,
+        "seller": seller_result.response,
+        "shipment": shipment_result.response,
+        "stock": stock_result.response
+    }
+
+    return json(result)
 
 
 app.blueprint(api)

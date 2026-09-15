@@ -64,3 +64,9 @@ async def handle_delivery_notification(ctx: StatefulFunction):
         customer = Customer(**state)
     customer.DeliveryCount += 1
     ctx.put(customer)
+
+
+
+@customer_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data

@@ -45,4 +45,7 @@ async def register(ctx: StatefulFunction, cart_id):
 
 
 
-    
+
+@product_cart_router_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data

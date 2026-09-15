@@ -94,3 +94,7 @@ async def get_stock(ctx: StatefulFunction) -> dict:
     if state is None:
         raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
     return state
+
+@stock_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data

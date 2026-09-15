@@ -79,3 +79,10 @@ async def get_product(ctx: StatefulFunction) -> dict:
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
     return state
+
+
+
+
+@product_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
