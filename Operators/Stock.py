@@ -98,3 +98,9 @@ async def get_stock(ctx: StatefulFunction) -> dict:
 @stock_operator.register
 async def get_all_state(ctx: StatefulFunction) -> dict:
     return ctx.data
+
+
+@stock_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state

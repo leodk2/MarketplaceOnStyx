@@ -395,6 +395,56 @@ async def get_all_state(_):
     return json(result)
 
 
+# this only works with one partition, but it's useful for debugging and testing
+@api.put("allState")
+@openapi.body(
+    {
+        "application/json": openapi.Object(
+            properties={
+                "cart": openapi.Object(),
+                "customer": openapi.Object(),
+                "order": openapi.Object(),
+                "payment": openapi.Object(),
+                "product": openapi.Object(),
+                "product_cart_router": openapi.Object(),
+                "seller": openapi.Object(),
+                "shipment": openapi.Object(),
+                "stock": openapi.Object(),
+            }
+        )
+    }
+)
+async def put_all_state(request: Request):
+    payload: dict = request.json
+
+    for operator_name, operator in (
+        ("cart", cart_operator),
+        ("customer", customer_operator),
+        ("order", order_operator),
+        ("payment", payment_operator),
+        ("product", product_operator),
+        ("product_cart_router", product_cart_router_operator),
+        ("seller", seller_operator),
+        ("shipment", shipment_operator),
+        ("stock", stock_operator),
+    ):
+        state = payload.get(operator_name)
+        if not state:
+            continue
+
+        future = await styx_client.send_event(
+            operator=operator, key="all", function="set_all_state", params=(state,)
+        )
+        result: StyxResponse | None = await future.get()
+        if result is None:
+            return json({"Error": "Failed to set all state"}, status=500)
+
+        if is_error(result.response):
+            return json(result.response, status=500)
+
+    return json({"State set": True})
+
+
 app.blueprint(api)
 
 

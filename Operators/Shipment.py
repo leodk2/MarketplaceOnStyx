@@ -163,3 +163,9 @@ async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_
 @shipment_operator.register
 async def get_all_state(ctx: StatefulFunction) -> dict:
     return ctx.data
+
+
+@shipment_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state

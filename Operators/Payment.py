@@ -124,3 +124,9 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
 @payment_operator.register
 async def get_all_state(ctx: StatefulFunction) -> dict:
     return ctx.data
+
+
+@payment_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state
