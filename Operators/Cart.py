@@ -118,3 +118,14 @@ async def update_cart_price(ctx: StatefulFunction, new_price: float):
     ctx.put(state)
 
     return ctx.key
+
+
+@cart_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@cart_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state

@@ -250,3 +250,14 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 async def GetOrders(ctx: StatefulFunction):
     # have to check if any state exists
     return ctx.get()
+
+
+@order_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@order_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state

@@ -9,7 +9,7 @@ from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from States.ShipmentState import ShipmentState
 from Requests.DeliveryNotification import DeliveryNotification
 
-shipment_operator = Operator("shipment", 4)  # keyed by order_id
+shipment_operator = Operator("shipment")  # keyed by order_id
 
 class ShipmentDoesNotExist(Exception):
     pass
@@ -158,3 +158,14 @@ async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_
         )
     
 
+
+
+@shipment_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@shipment_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
+    return state

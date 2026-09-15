@@ -71,16 +71,17 @@ class StockItemAlreadyExists(Exception):
 
 
 @stock_operator.register
-async def on_product_update(ctx: StatefulFunction, newVersion: str) -> StockItem:
+async def on_product_update(ctx: StatefulFunction, newVersion: str) -> dict:
     state = ctx.get()
-    if state is None:
+    if state is None: 
         raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
-    state['Version'] = newVersion
-    ctx.put(state)
+    stockitem: StockItem = StockItem(**state)
+    stockitem.version = newVersion
+    ctx.put(asdict(stockitem))
     return ctx.get()
 
 @stock_operator.register
-async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockItem:
+async def create_stock(ctx: StatefulFunction, stock_item: dict) -> dict:
     state = ctx.get()
     if state is not None:
         raise StockItemAlreadyExists(f"Error: StockItem with id {ctx.key} already exists")
@@ -88,8 +89,18 @@ async def create_stock(ctx: StatefulFunction, stock_item: StockItem) -> StockIte
     return stock_item
 
 @stock_operator.register
-async def get_stock(ctx: StatefulFunction) -> StockItem:
+async def get_stock(ctx: StatefulFunction) -> dict:
     state = ctx.get()
     if state is None:
         raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
+    return state
+
+@stock_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@stock_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    ctx.batch_insert(state)
     return state
