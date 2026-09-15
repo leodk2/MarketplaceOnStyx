@@ -36,10 +36,17 @@ class OrderNotFoundException(Exception):
 @order_operator.register
 async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
+
+    # TODO: Here we have to add a new order instead of getting it
     data: dict = ctx.get()
+    if data is None:
+        raise OrderNotFoundException(f"Error: No order state found for customer {ctx.key}")
+
     state = OrderState(**(data.get("state", {})))
     order_id = data.get("next_id", 1)
+
     state.checkouts.update({order_id: checkoutRequest})
+
     for idx, item in enumerate(checkoutRequest.items):
         reservation_event: ReserveStockRequest = ReserveStockRequest(
             order_id, item, idx
@@ -50,7 +57,9 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
             f"{item.sellerId}:{item.productId}",
             (reservation_event, ctx.key),
         )
+
     state.set_remaining_acks(order_id, len(checkoutRequest.items))
+
     ctx.put({"state": state, "next_id": order_id + 1})
 
 
@@ -259,5 +268,8 @@ async def get_all_state(ctx: StatefulFunction) -> dict:
 
 @order_operator.register
 async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
-    ctx.batch_insert(state)
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
     return state

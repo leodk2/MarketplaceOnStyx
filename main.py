@@ -32,6 +32,7 @@ from Operators.ProductCartRouter import product_cart_router_operator
 from Operators.Seller import seller_operator
 from Operators.Stock import stock_operator
 from Operators.Shipment import shipment_operator
+from Requests.CustomerCheckout import CustomerCheckout
 
 APP_NAME = "marketplaceonstyx"
 
@@ -128,29 +129,35 @@ async def submit_dataflow_graph(_, n_partitions: int):
     return json({"Graph submitted": True})
 
 
-@api.put("cart/<customer_id>/add")
+@api.put("cart/<customer_id:int>/add")
 @openapi.body(cart_item_entity.CartItem, validate=True)
-async def add_to_cart(_, customer_id, body: cart_item_entity.CartItem):
+async def add_to_cart(_, customer_id: int, body: cart_item_entity.CartItem):
     req = await styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
     res = cast(StyxResponse, await req.get())
-    return create_response(res, "Failed to add item to cart " + customer_id)
+    return create_response(res, "Failed to add item to cart " + str(customer_id))
 
 
-@api.post("cart/<customer_id>/checkout")
-async def checkout_cart(request: Request, customer_id):
-    checkout_request = request.json.get("checkout")
+@api.post("cart/<customer_id:int>/checkout")
+@openapi.body(CustomerCheckout, validate=True)
+async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
     req = await styx_client.send_event(
-        cart_operator, customer_id, "checkout", (customer_id, checkout_request)
+        cart_operator, 
+        customer_id, 
+        "checkout", 
+        (customer_id, body)
     )
     res = cast(StyxResponse, await req.get())
-    return create_response(res, "Failed to checkout customer " + customer_id)
+    return create_response(res, "Failed to checkout customer " + str(customer_id))
 
 
-@api.post("cart/<customer_id>/seal")
-async def seal_cart(request: Request, customer_id):
+@api.post("cart/<customer_id:int>/seal")
+async def seal_cart(_: Request, customer_id: int):
     req = await styx_client.send_event(
-        cart_operator, customer_id, "seal", (customer_id,)
+        cart_operator, 
+        customer_id, 
+        "seal", 
+        (customer_id,)
     )
     res = cast(StyxResponse, await req.get())
     return text(
@@ -257,7 +264,7 @@ async def create_seller(_, body: seller_entity.Seller):
 
 
 @api.get("seller/dashboard/<seller_id:int>")
-async def get_seller_dashboard(request, seller_id: int):
+async def get_seller_dashboard(_, seller_id: int):
     future = await styx_client.send_event(
         seller_operator,
         seller_id,
@@ -268,7 +275,7 @@ async def get_seller_dashboard(request, seller_id: int):
     return create_response(result, "Could not get dashboard")
 
 
-@api.patch("shipment/<tid>")
+@api.patch("shipment/<tid:int>")
 async def deliver_shipment(_, tid):
     future = await styx_client.send_event(
         shipment_operator,
@@ -395,6 +402,7 @@ async def get_all_state(_):
     return json(result)
 
 
+# TODO: This does not really work
 # this only works with one partition, but it's useful for debugging and testing
 @api.put("allState")
 @openapi.body(

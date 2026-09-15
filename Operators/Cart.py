@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import logging
 from datetime import datetime
 
@@ -25,12 +26,33 @@ class ItemsNegative(Exception):
 class CartDoesNotExist(Exception):
     pass
 
+class CartAlreadyExists(Exception):
+    pass
+
 
 class CustomerIdMismatch(Exception):
     pass
 
+class ItemAlreadyInCart(Exception):
+    pass
 
-# For now we assume that a customer only can have one cart
+@cart_operator.register
+async def create_cart(ctx: StatefulFunction):
+    if ctx.get() is not None:
+        raise CartAlreadyExists(f"Error: Cart for customer with id {ctx.key} already exists")
+
+    cart: Cart = Cart(
+        customerId=ctx.key, 
+        status=CartStatus.OPEN, 
+        items=[],
+        instanceId=0, # TODO: don't know what to put here
+        divergencies=[] # TODO: don't know what to put here
+    )
+
+    ctx.put(asdict(cart))
+    return ctx.key
+
+
 @cart_operator.register
 async def add_item(ctx: StatefulFunction, item: dict):
 
@@ -38,7 +60,11 @@ async def add_item(ctx: StatefulFunction, item: dict):
     if cartItem.quantity <= 0:
        raise ItemsNegative(f"Error: Item {cartItem.productId} shows no positive quantity")
 
-    cart_data: Cart = ctx.get()
+    state = ctx.get()
+    if state is None:
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
+
+    cart_data: Cart = Cart(**state)
 
     if cart_data.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent(
@@ -52,24 +78,30 @@ async def add_item(ctx: StatefulFunction, item: dict):
         params=(ctx.key,),
     )
 
+    if cartItem in cart_data.items:
+        raise ItemAlreadyInCart(f"Error: Item {cartItem.productId} is already in cart {ctx.key}")
+
     cart_data.items.append(cartItem)
+
+    ctx.put(asdict(cart_data))
 
     return ctx.key
 
 
 @cart_operator.register
 async def seal(ctx: StatefulFunction):
-    cart_data: Cart = ctx.get()
-    if cart_data is None:
+    state = ctx.get()
+    if state is None:
         raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
+    cart_data: Cart = Cart(**state)
     doSeal(cart_data)
+    ctx.put(asdict(cart_data))
     return cart_data.customerId
 
 
 def doSeal(cart: Cart | None):
     if cart is None:
         raise CartDoesNotExist()
-
     cart.status = CartStatus.OPEN
 
 
@@ -80,10 +112,10 @@ async def checkout(
     customerCheckout = CustomerCheckout(**customerCheckout_dict)
     if customer_id is not customerCheckout.customerId:
         raise CustomerIdMismatch()
-    data = ctx.get()
-    if data is None:
+    state = ctx.get()
+    if state is None:
         raise CartDoesNotExist()
-    cart: Cart = ctx.get()
+    cart: Cart = Cart(**state)
     if cart.status is CartStatus.CHECKOUT_SENT:
         raise CheckoutAlreadySent()
 
@@ -93,9 +125,16 @@ async def checkout(
         timestamp=datetime.now(),
         instanceId=customerCheckout.instanceId,
     )
-    ctx.call_remote_async("order", "checkout_request", ctx.key, (checkoutRequest,))
+    ctx.call_remote_async(
+        "order",
+        "checkout_request",
+        ctx.key,
+        (asdict(checkoutRequest),)
+    )
 
     doSeal(cart)
+    ctx.put(asdict(cart))
+
     return customer_id
 
 
@@ -112,10 +151,12 @@ async def update_cart_price(ctx: StatefulFunction, new_price: float):
     if state is None:
         raise CartDoesNotExist(f"Error: Cart for customer with id {ctx.key} does not exist")
 
-    for item in state["Items"]:
-        item.Price = new_price
+    cart: Cart = Cart(**state)
 
-    ctx.put(state)
+    for item in cart.items:
+        item.unitPrice = new_price
+
+    ctx.put(asdict(cart))
 
     return ctx.key
 
@@ -127,5 +168,8 @@ async def get_all_state(ctx: StatefulFunction) -> dict:
 
 @cart_operator.register
 async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
-    ctx.batch_insert(state)
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
     return state
