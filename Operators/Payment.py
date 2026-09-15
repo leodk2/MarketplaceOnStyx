@@ -15,7 +15,7 @@ from Requests.CustomerCheckout import (
     PaymentStockEvent,
 )
 
-payment_operator = Operator("payment", 4)  # keyed by order_id
+payment_operator = Operator("payment")  # keyed by order_id
 
 
 @payment_operator.register
