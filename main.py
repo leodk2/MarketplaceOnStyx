@@ -280,8 +280,14 @@ async def deliver_shipment(_, tid):
 
 
 @api.post("stock")
-@openapi.body(stock_item_entity.StockItem, validate=True)
-async def create_stock(_, body: stock_item_entity.StockItem):
+@openapi.body(stock_item_entity.StockItem)
+async def create_stock(request: Request):
+    data = dict(request.json)
+    for field in ("created_at", "updated_at"):
+        if isinstance(data.get(field), str):
+            data[field] = datetime.fromisoformat(data[field])
+    body = stock_item_entity.StockItem(**data)
+
     future = await styx_client.send_event(
         operator=stock_operator,
         key=f"{body.seller_id}:{body.product_id}",
