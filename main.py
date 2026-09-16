@@ -6,6 +6,11 @@ from datetime import datetime
 from enum import Enum
 from importlib import import_module
 from pkgutil import iter_modules
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime
+from enum import Enum
+from importlib import import_module
+from pkgutil import iter_modules
 from typing import cast
 
 from sanic import Blueprint, Request, Sanic, json, text
@@ -31,6 +36,11 @@ from Operators.Product import product_operator
 from Operators.ProductCartRouter import product_cart_router_operator
 from Operators.Seller import seller_operator
 from Operators.Stock import stock_operator
+from Operators.Product import product_operator
+from Operators.ProductCartRouter import product_cart_router_operator
+from Operators.Seller import seller_operator
+from Operators.Stock import stock_operator
+from Operators.Shipment import shipment_operator
 
 APP_NAME = "marketplaceonstyx"
 
@@ -106,6 +116,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
     order_operator.set_n_partitions(n_partitions)
     seller_operator.set_n_partitions(n_partitions)
     customer_operator.set_n_partitions(n_partitions)
+    shipment_operator.set_n_partitions(n_partitions)
 
     g.add_operators(
         product_operator,
@@ -130,9 +141,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
 async def add_to_cart(_, customer_id, body: cart_item_entity.CartItem):
     req = await styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
     res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
-    )
+    return create_response(res, "Failed to add item to cart " + customer_id)
 
 
 @api.post("cart/<customer_id>/checkout")
@@ -143,9 +152,7 @@ async def checkout_cart(request: Request, customer_id):
         cart_operator, customer_id, "checkout", (customer_id, checkout_request)
     )
     res = cast(StyxResponse, await req.get())
-    return text(
-        f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
-    )
+    return create_response(res, "Failed to checkout customer " + customer_id)
 
 
 @api.post("cart/<customer_id>/seal")
@@ -257,14 +264,28 @@ async def create_seller(_, body: seller_entity.Seller):
     return create_response(result, "Failed to create seller")
 
 
-@api.get("seller/dashboard/<seller_id>")
-async def get_seller_dashboard(request, seller_id):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+@api.get("seller/dashboard/<seller_id:int>")
+async def get_seller_dashboard(request, seller_id: int):
+    future = await styx_client.send_event(
+        seller_operator,
+        seller_id,
+        "get_dashboard",
+    )
+    result: StyxResponse | None = await future.get()
+
+    return create_response(result, "Could not get dashboard")
 
 
 @api.patch("shipment/<tid>")
-async def deliver_shipment(request, tid):
-    raise NotImplementedError("This endpoint is not yet implemented.")
+async def deliver_shipment(_, tid):
+    future = await styx_client.send_event(
+        shipment_operator,
+        tid,
+        "deliver_shipment",
+    )
+    result: StyxResponse | None = await future.get()
+
+    return create_response(result, "Could not deliver shipment")
 
 
 @api.post("stock")

@@ -24,7 +24,7 @@ from Requests.CustomerCheckout import (
 from States.OrderState import OrderState
 
 # keyed by customer id which  is the same as cart id
-order_operator = Operator("order")
+order_operator = Operator("order")  # keyed by cart_id which is customer_id
 
 logger = getLogger(__name__)
 
