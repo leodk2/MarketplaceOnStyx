@@ -1,3 +1,4 @@
+from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 from datetime import datetime
 
 from styx.common.operator import Operator
@@ -70,4 +71,10 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     ctx.call_remote_async(
         "order", "shipment_notification", payment.customer_checkout.customerId, (notif,)
     )
-    # TODO transaction mark/egress message?
+    return TransactionMark(
+        payment.instance_id,
+        TransactionType.CUSTOMER_SESSION,
+        payment.customer_checkout.customerId,
+        MarkStatus.SUCCESS,
+        "shipment",
+    )

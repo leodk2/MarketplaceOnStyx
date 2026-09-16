@@ -1,5 +1,6 @@
+import pickle
+from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 import itertools
-from Entities.SellerDashboard import OrderSellerView
 from dataclasses import asdict
 from logging import getLogger
 
@@ -8,6 +9,7 @@ from styx.common.stateful_function import StatefulFunction
 
 from Entities.Order import OrderStatus
 from Entities.Packages import PackageStatus
+from Entities.SellerDashboard import OrderSellerView
 from Entities.Shipment import ShipmentStatus
 from Requests.CustomerCheckout import (
     InvoiceIssued,
@@ -114,7 +116,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 
 
 @seller_operator.register
-async def get_dashboard(ctx: StatefulFunction):
+async def get_dashboard(ctx: StatefulFunction, req):
     # call shipment to get notifications that is still ongoing
     # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
     # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
@@ -123,6 +125,7 @@ async def get_dashboard(ctx: StatefulFunction):
     order_entries = list(
         itertools.chain.from_iterable([oe for oe in state.order_entries.values()])
     )
+    mark: TransactionMark
     if len(state.order_entries) > 0:
         seller_view = OrderSellerView(
             ctx.key,
@@ -135,7 +138,23 @@ async def get_dashboard(ctx: StatefulFunction):
             sum(oe.total_items for oe in order_entries),
         )
 
+        dashboard = {"sellerView": seller_view, "orderEntries": order_entries}
         # where to write the data?
-        return {"sellerView": seller_view, "orderEntries": order_entries}
+        res = pickle.dumps(dashboard)
+        mark = TransactionMark(
+            req["tid"],
+            TransactionType.QUERY_DASHBOARD,
+            ctx.key,
+            MarkStatus.SUCCESS,
+            str(res),
+        )
+    else:
+        mark = TransactionMark(
+            req["tid"],
+            TransactionType.QUERY_DASHBOARD,
+            ctx.key,
+            MarkStatus.SUCCESS,
+            "seller",
+        )
 
-    return {}
+    return mark

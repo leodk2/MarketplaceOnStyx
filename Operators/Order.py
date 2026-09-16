@@ -1,3 +1,4 @@
+from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 import itertools
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -77,8 +78,14 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
         else:
             # Do we need transaction marks, and egress messages?
             # Maybe that would just be a return of this workflow?
-
             state.clean_state(order_id)
+            return TransactionMark(
+                checkoutRequest.customerCheckout.instanceId,
+                TransactionType.CUSTOMER_SESSION,
+                checkoutRequest.customerCheckout.customerId,
+                MarkStatus.NOT_ACCEPTED,
+                "order",
+            )
 
     data["state"] = asdict(state)
     ctx.put(data)
