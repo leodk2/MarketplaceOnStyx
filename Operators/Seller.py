@@ -1,24 +1,22 @@
+import itertools
 import pickle
-from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
-import itertools
-import itertools
-from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from dataclasses import asdict
 from logging import getLogger
 
-from Requests.DeliveryNotification import DeliveryNotification
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Order import OrderStatus
 from Entities.Packages import PackageStatus
-from Entities.SellerDashboard import OrderSellerView
+from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from Entities.Shipment import ShipmentStatus
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import (
     InvoiceIssued,
     PaymentNotification,
     ShipmentNotification,
 )
+from Requests.DeliveryNotification import DeliveryNotification
 from States.SellerState import OrderEntry, SellerCompositeState, SellerState
 
 seller_operator = Operator("seller", 4)
@@ -101,16 +99,16 @@ async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
         ctx.put(asdict(state))
         return ctx.key
 
-    target_entry = next((entry for entry in entries if entry.product_id == notif.product_id), None)
+    target_entry = next(
+        (entry for entry in entries if entry.product_id == notif.product_id), None
+    )
 
-    if (target_entry is not None):
+    if target_entry is not None:
         target_entry.delivery_status = notif.package_status
         target_entry.delivery_date = notif.delivery_date
         target_entry.package_id = notif.package_id
 
     ctx.put(asdict(state))
-
-
 
 
 @seller_operator.register
@@ -164,7 +162,7 @@ async def get_dashboard(ctx: StatefulFunction, req):
             sum(oe.total_items for oe in order_entries),
         )
 
-        dashboard = {"sellerView": seller_view, "orderEntries": order_entries}
+        dashboard = SellerDashboard(seller_view, order_entries)
         # where to write the data?
         res = pickle.dumps(dashboard)
         mark = TransactionMark(
