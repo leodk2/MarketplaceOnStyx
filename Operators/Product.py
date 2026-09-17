@@ -1,10 +1,11 @@
-from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
+from TransactionMarkException import TransactionMarkException
 import logging
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Product import Product
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.PriceUpdate import UpdatePriceEvent
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,14 @@ async def update_product_price(
     new_price = UpdatePriceEvent(**new_price_request)
     state = ctx.get()
     if state is None:
-        return TransactionMark(
-            new_price.instance_id,
-            TransactionType.PRICE_UPDATE,
-            new_price.seller_id,
-            MarkStatus.ERROR,
-            "product",
+        raise TransactionMarkException(
+            TransactionMark(
+                new_price.instance_id,
+                TransactionType.PRICE_UPDATE,
+                new_price.seller_id,
+                MarkStatus.ERROR,
+                "product",
+            )
         )
         # raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
 

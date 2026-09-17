@@ -1,4 +1,3 @@
-from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 import itertools
 from dataclasses import asdict
 from datetime import datetime, timedelta
@@ -12,6 +11,7 @@ from Entities.ItemStatus import ItemStatus
 from Entities.Order import Order, OrderStatus
 from Entities.OrderHistory import OrderHistory
 from Entities.OrderItem import OrderItem
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import (
     CheckoutRequest,
     InvoiceIssued,
@@ -22,6 +22,7 @@ from Requests.CustomerCheckout import (
     ShipmentStatus,
 )
 from States.OrderState import OrderState
+from TransactionMarkException import TransactionMarkException
 
 # keyed by customer id which  is the same as cart id
 order_operator = Operator("order")  # keyed by cart_id which is customer_id
@@ -83,12 +84,14 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
             # I guess we need to raise an exception here to roll back changes?
             # Or is it fine to just return a transaction mark and leave the state as is?
             # This is what is done in statefun
-            return TransactionMark(
-                checkoutRequest.customerCheckout.instanceId,
-                TransactionType.CUSTOMER_SESSION,
-                checkoutRequest.customerCheckout.customerId,
-                MarkStatus.NOT_ACCEPTED,
-                "order",
+            raise TransactionMarkException(
+                TransactionMark(
+                    checkoutRequest.customerCheckout.instanceId,
+                    TransactionType.CUSTOMER_SESSION,
+                    checkoutRequest.customerCheckout.customerId,
+                    MarkStatus.NOT_ACCEPTED,
+                    "order",
+                )
             )
 
     data["state"] = asdict(state)

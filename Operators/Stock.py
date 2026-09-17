@@ -1,4 +1,3 @@
-from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 from dataclasses import asdict
 from datetime import datetime
 from logging import getLogger
@@ -10,11 +9,13 @@ from Entities.CartItem import CartItem
 from Entities.ItemStatus import ItemStatus
 from Entities.PaymentType import PaymentStatus
 from Entities.StockItem import StockItem
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import (
     PaymentStockEvent,
     ReserveStockRequest,
     ReserveStockResponse,
 )
+from TransactionMarkException import TransactionMarkException
 
 stock_operator = Operator("stock", composite_key_hash_params=(0, ":"))
 # composite key of seller_id:product_id
@@ -67,10 +68,6 @@ def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> Item
     return ItemStatus.IN_STOCK
 
 
-class StockItemDoesNotExist(Exception):
-    pass
-
-
 class StockItemAlreadyExists(Exception):
     pass
 
@@ -81,16 +78,16 @@ async def on_product_update(ctx: StatefulFunction, newVersion: str) -> Transacti
     state["version"] = newVersion
     seller_id = ctx.key[: str(ctx.key).find(":")]
     if state is None:
-        # raise StockItemDoesNotExist(
-        #     f"Error: StockItem with id {ctx.key} does not exist"
-        # )
-        return TransactionMark(
-            newVersion,
-            TransactionType.UPDATE_PRODUCT,
-            seller_id,
-            MarkStatus.ERROR,
-            "stock",
+        raise TransactionMarkException(
+            TransactionMark(
+                newVersion,
+                TransactionType.UPDATE_PRODUCT,
+                seller_id,
+                MarkStatus.ERROR,
+                "stock",
+            )
         )
+
     ctx.put(state)
     return TransactionMark(
         state["version"],
