@@ -84,7 +84,13 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
 
     for oi in invoice.items:
         stock_payment_event = PaymentStockEvent(oi.quantity, PaymentStatus.SUCCEEDED)
-        ctx.call_remote_async("stock", "stock_payment", (asdict(stock_payment_event),))
+        ctx.call_remote_async(
+            "stock", 
+            "stock_payment", 
+            f"{oi.sellerId}:{oi.productId}", 
+            (asdict(stock_payment_event),)
+        )
+
     seller_ids = (oi.sellerId for oi in invoice.items)
 
     seller_notification = PaymentNotification(

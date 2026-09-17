@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from Entities.Order import Order
 from Entities.OrderHistory import OrderHistory
@@ -8,12 +8,22 @@ from Requests.CustomerCheckout import CheckoutRequest
 
 @dataclass
 class OrderState:
-    checkouts: dict[int, CheckoutRequest]
-    orders: dict[int, Order]
-    orderItems: dict[int, list[OrderItem]]
-    orderHistory: dict[int, list[OrderHistory]]
-    inStockItems: dict[int, list[int]]
-    remainingAcksMap: dict[int, int]
+    checkouts: dict[int, CheckoutRequest] = field(default_factory=dict)
+    orders: dict[int, Order] = field(default_factory=dict)
+    orderItems: dict[int, list[OrderItem]] = field(default_factory=dict)
+    orderHistory: dict[int, list[OrderHistory]] = field(default_factory=dict)
+    inStockItems: dict[int, list[int]] = field(default_factory=dict)
+    remainingAcksMap: dict[int, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.checkouts = {
+            order_id: (checkout if isinstance(checkout, CheckoutRequest) else CheckoutRequest(**checkout))
+            for order_id, checkout in self.checkouts.items()
+        }
+        self.orders = {
+            order_id: (order if isinstance(order, Order) else Order(**order))
+            for order_id, order in self.orders.items()
+        }
 
     def set_remaining_acks(self, order_id: int, item_count: int):
         if not order_id in self.remainingAcksMap:

@@ -30,7 +30,7 @@ async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_i
     response = ReserveStockResponse(
         item.orderId, cart_item.sellerId, cart_item.productId, status, item.idx
     )
-    ctx.call_remote_async("order", "try_reserve_response", caller_id, (response,))
+    ctx.call_remote_async("order", "try_reserve_response", caller_id, (asdict(response),))
 
 
 @stock_operator.register

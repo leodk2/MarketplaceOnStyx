@@ -31,7 +31,7 @@ async def register_seller(ctx: StatefulFunction, seller):
     if ctx.get() is not None:
         raise SellerExistsError("error: seller already exists")
     state = SellerCompositeState(seller, SellerState())
-    ctx.put(state)
+    ctx.put(asdict(state))
     return ctx.key
 
 
