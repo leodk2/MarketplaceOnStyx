@@ -35,7 +35,7 @@ async def replace_product(ctx: StatefulFunction, product) -> Product:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
-    
+
     ctx.call_remote_async(
         function_name="on_product_update",
         operator_name="stock",
@@ -55,7 +55,14 @@ async def update_product_price(
     new_price = UpdatePriceEvent(**new_price_request)
     state = ctx.get()
     if state is None:
-        raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
+        return TransactionMark(
+            new_price.instance_id,
+            TransactionType.PRICE_UPDATE,
+            new_price.seller_id,
+            MarkStatus.ERROR,
+            "product",
+        )
+        # raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
 
     ctx.call_remote_async(
         operator_name="product_cart_router",

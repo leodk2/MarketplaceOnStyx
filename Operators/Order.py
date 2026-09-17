@@ -79,6 +79,10 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
             # Do we need transaction marks, and egress messages?
             # Maybe that would just be a return of this workflow?
             state.clean_state(order_id)
+
+            # I guess we need to raise an exception here to roll back changes?
+            # Or is it fine to just return a transaction mark and leave the state as is?
+            # This is what is done in statefun
             return TransactionMark(
                 checkoutRequest.customerCheckout.instanceId,
                 TransactionType.CUSTOMER_SESSION,

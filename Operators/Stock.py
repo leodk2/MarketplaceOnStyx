@@ -78,13 +78,20 @@ class StockItemAlreadyExists(Exception):
 @stock_operator.register
 async def on_product_update(ctx: StatefulFunction, newVersion: str) -> TransactionMark:
     state = ctx.get()
-    if state is None:
-        raise StockItemDoesNotExist(
-            f"Error: StockItem with id {ctx.key} does not exist"
-        )
     state["version"] = newVersion
-    ctx.put(state)
     seller_id = ctx.key[: str(ctx.key).find(":")]
+    if state is None:
+        # raise StockItemDoesNotExist(
+        #     f"Error: StockItem with id {ctx.key} does not exist"
+        # )
+        return TransactionMark(
+            newVersion,
+            TransactionType.UPDATE_PRODUCT,
+            seller_id,
+            MarkStatus.ERROR,
+            "stock",
+        )
+    ctx.put(state)
     return TransactionMark(
         state["version"],
         TransactionType.UPDATE_PRODUCT,
