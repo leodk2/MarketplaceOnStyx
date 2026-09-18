@@ -94,15 +94,23 @@ async def seal(ctx: StatefulFunction):
     if state is None:
         raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
     cart_data: Cart = Cart(**state)
-    doSeal(cart_data)
+    doSeal(ctx, cart_data)
     ctx.put(asdict(cart_data))
     return cart_data.customerId
 
 
-def doSeal(cart: Cart | None):
+def doSeal(ctx: StatefulFunction, cart: Cart | None):
     if cart is None:
         raise CartDoesNotExist()
     cart.status = CartStatus.OPEN
+    for item in cart.items:
+        ctx.call_remote_async(
+            operator_name="product_cart_router",
+            key=item.productId,
+            function_name="unregister",
+            params=(ctx.key,)
+        )
+    cart.items = []
 
 
 @cart_operator.register
@@ -132,7 +140,7 @@ async def checkout(
         (asdict(checkoutRequest),)
     )
 
-    doSeal(cart)
+    doSeal(ctx, cart)
     ctx.put(asdict(cart))
 
     return customer_id

@@ -43,7 +43,14 @@ async def register(ctx: StatefulFunction, cart_id: int):
     return ctx.key
 
 
-
+@product_cart_router_operator.register
+async def unregister(ctx: StatefulFunction, cart_id: int):
+    state = ctx.get()
+    if state is None:
+        raise ProductCartRoutingDoesNotExist(f"Error: No carts registered for product {ctx.key}")
+    state["carts"].remove(cart_id)
+    ctx.put(state)
+    return ctx.key
 
 
 @product_cart_router_operator.register

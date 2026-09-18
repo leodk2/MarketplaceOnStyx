@@ -21,7 +21,7 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentConfirmed(**payment_dict)
     now = datetime.now()
     data = ctx.get()
-    shipment_id = (data.get("next_id", 0) if data is not None else 0) + 1
+    shipment_id = (data.get("next_id", 1) if data is not None else 1)
     shipment = Shipment(
         shipment_id,
         payment.order_id,
@@ -60,7 +60,7 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     state = ShipmentState(**(data.get("state", {}) if data is not None else {}))
     state.shipment.update({shipment_id: shipment})
     state.packages.update({shipment_id: packages})
-    ctx.put({"next_id": shipment_id, "state": asdict(state)})
+    ctx.put({"next_id": shipment_id + 1, "state": asdict(state)})
 
     notif = ShipmentNotification(
         payment.order_id,
@@ -123,7 +123,7 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
         "handle_delivery_notification",
         package.seller_id,
         (
-           DeliveryNotification(
+           asdict(DeliveryNotification(
                 order_id=package.order_id,
                 customer_id=shipment_obj.customer_id,
                 package_id=package.package_id,
@@ -132,7 +132,7 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
                 product_name=package.product_name,
                 package_status=PackageStatus.DELIVERED,
                 delivery_date=now
-            ),
+            )),
         )
     )
     ctx.call_remote_async(
@@ -150,12 +150,12 @@ async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_
             "shipment_notification",
             shipment_obj.order_id,
             (
-                ShipmentNotification(
+                asdict(ShipmentNotification(
                     shipment_obj.order_id,
                     ShipmentStatus.CONCLUDED,
                     now,
                     shipment_obj.customer_id,
-                ),
+                )),
             )
         )
     

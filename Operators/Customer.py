@@ -32,7 +32,7 @@ async def register_customer(ctx: StatefulFunction, customer: dict):
         function_name="create_cart"
     )
     
-    ctx.put(customer)
+    ctx.put(asdict(newCustomer))
     return ctx.key
 
 
@@ -60,7 +60,7 @@ async def payment_notification(ctx: StatefulFunction, notificationType_value):
             customer.FailedPaymentCount += 1
         case CustomerNotificationType.CHECKOUT_FAILED:
             customer.FailedPaymentCount += 1
-    ctx.put(customer)
+    ctx.put(asdict(customer))
 
 
 @customer_operator.register
@@ -72,7 +72,7 @@ async def handle_delivery_notification(ctx: StatefulFunction):
     else:
         customer = Customer(**state)
     customer.DeliveryCount += 1
-    ctx.put(customer)
+    ctx.put(asdict(customer))
 
 
 

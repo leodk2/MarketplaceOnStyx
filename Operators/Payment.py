@@ -121,6 +121,13 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
         customer_checkout.instanceId,
     )
 
+    ctx.call_remote_async(
+        "shipment",
+        "payment_confirmed",
+        ctx.key,
+        (asdict(payment_confirmed),),
+    )
+
     #TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
 
 
