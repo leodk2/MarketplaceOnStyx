@@ -38,7 +38,8 @@ async def register_seller(ctx: StatefulFunction, seller):
 @seller_operator.register
 async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     invoice = InvoiceIssued(**invoice_dict)
-    state = SellerCompositeState(**(ctx.get())).state
+    composite_state = SellerCompositeState(**(ctx.get()))
+    state = composite_state.state
 
     order_items = invoice.items
     seller_id = ctx.key
@@ -66,7 +67,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
         )
     order_entries.append(order_entry)
 
-    ctx.put(asdict(state))
+    ctx.put(asdict(composite_state))
 
 
 @seller_operator.register

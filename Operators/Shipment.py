@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import datetime
 
 from styx.common.operator import Operator
@@ -19,7 +20,8 @@ class ShipmentDoesNotExist(Exception):
 async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentConfirmed(**payment_dict)
     now = datetime.now()
-    shipment_id = ctx.get().get("next_id", 0) + 1
+    data = ctx.get()
+    shipment_id = (data.get("next_id", 0) if data is not None else 0) + 1
     shipment = Shipment(
         shipment_id,
         payment.order_id,
@@ -55,10 +57,10 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
         packages.append(pkg)
         package_id += 1
 
-    state = ShipmentState(**(ctx.get().get("state", {})))
+    state = ShipmentState(**(data.get("state", {}) if data is not None else {}))
     state.shipment.update({shipment_id: shipment})
     state.packages.update({shipment_id: packages})
-    ctx.put({"next_id": shipment_id, "state": state})
+    ctx.put({"next_id": shipment_id, "state": asdict(state)})
 
     notif = ShipmentNotification(
         payment.order_id,
@@ -73,14 +75,14 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
             "seller", 
             "shipment_notification", 
             seller_id, 
-            (notif,)
+            (asdict(notif),)
         )
 
     ctx.call_remote_async(
         "order", 
         "shipment_notification", 
         payment.customer_checkout.customerId, 
-        (notif,)
+        (asdict(notif),)
     )
     # TODO transaction mark/egress message?
 

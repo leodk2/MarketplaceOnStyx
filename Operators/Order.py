@@ -224,7 +224,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     order: Order = state.orders[order_id]
     order.orderStatus = OrderStatus.PAYMENT_PROCESSED
     order.updatedAt = now
-    ctx.put({"next_id": next_id, "state": state})
+    ctx.put({"next_id": next_id, "state": asdict(state)})
 
 
 @order_operator.register

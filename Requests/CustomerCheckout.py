@@ -78,6 +78,17 @@ class InvoiceIssued:
     total_invoice: float
     instance_id: str
 
+    def __post_init__(self):
+        if not isinstance(self.customer_checkout, CustomerCheckout):
+            object.__setattr__(
+                self, "customer_checkout", CustomerCheckout(**self.customer_checkout)
+            )
+        object.__setattr__(
+            self,
+            "items",
+            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+        )
+
 
 @dataclass(frozen=True)
 class PaymentStockEvent:
@@ -106,6 +117,17 @@ class PaymentConfirmed:
     items: list[OrderItem]
     date: datetime
     instance_id: str
+
+    def __post_init__(self):
+        if not isinstance(self.customer_checkout, CustomerCheckout):
+            object.__setattr__(
+                self, "customer_checkout", CustomerCheckout(**self.customer_checkout)
+            )
+        object.__setattr__(
+            self,
+            "items",
+            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+        )
 
 
 @dataclass(frozen=True)

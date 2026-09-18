@@ -33,21 +33,6 @@ async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_i
     ctx.call_remote_async("order", "try_reserve_response", caller_id, (asdict(response),))
 
 
-@stock_operator.register
-async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
-    payment = PaymentStockEvent(**payment_dict)
-    state = StockItem(**(ctx.get()))
-
-    if payment.status is PaymentStatus.SUCCEEDED:
-        state.confirm_reservation(payment.quantity)
-    else:
-        state.cancel_reservation(payment.quantity)
-    # handle this key not having a stock item
-    state.updated_at = datetime.now()
-
-    ctx.put(asdict(state))
-
-
 def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> ItemStatus:
     state = ctx.get()
     if state is None:
@@ -107,3 +92,21 @@ async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
     else:
         ctx.put(None)
     return state
+
+@stock_operator.register
+async def stock_payment(ctx: StatefulFunction, payment_dict: dict):
+    payment = PaymentStockEvent(**payment_dict)
+    state = ctx.get()
+    if state is None:
+        raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
+
+    stockItem: StockItem = StockItem(**state)
+
+    if payment.status is PaymentStatus.SUCCEEDED:
+        stockItem.confirm_reservation(payment.quantity)
+    else:
+        stockItem.cancel_reservation(payment.quantity)
+
+    stockItem.updated_at = datetime.now()
+
+    ctx.put(asdict(stockItem))
