@@ -19,7 +19,7 @@ class ProductCartRoutingDoesNotExist(Exception):
 async def route_price_update(ctx: StatefulFunction, new_price: float):
     state = ctx.get()
     if state is None:
-        raise ProductCartRoutingDoesNotExist(f"Error: No carts registered for product {ctx.key}")
+        return "No carts registered for product {ctx.key}"
 
     for cart_id in state["carts"]:
         ctx.call_remote_async(
