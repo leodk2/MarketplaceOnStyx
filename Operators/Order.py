@@ -37,9 +37,17 @@ class OrderNotFoundException(Exception):
 async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
     data: dict = ctx.get()
-    state = OrderState(**(data.get("state", {})))
-    order_id = data.get("next_id", 1)
-    state.checkouts.update({order_id: checkoutRequest})
+
+    state: OrderState | None = None
+    order_id = None
+
+    if data is None: # first order for this customer
+        state = OrderState()
+        order_id = 1
+    else:
+        state = OrderState(**(data.get("state", {})))
+        order_id = data.get("next_id", 1)
+
     for idx, item in enumerate(checkoutRequest.items):
         reservation_event: ReserveStockRequest = ReserveStockRequest(
             order_id, item, idx
@@ -48,10 +56,13 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
             "stock",
             "attempt_reserve_stock",
             f"{item.sellerId}:{item.productId}",
-            (reservation_event, ctx.key),
+            (asdict(reservation_event), ctx.key),
         )
+
+    state.checkouts.update({order_id: checkoutRequest})
     state.set_remaining_acks(order_id, len(checkoutRequest.items))
-    ctx.put({"state": state, "next_id": order_id + 1})
+    ctx.put({"state": asdict(state), "next_id": order_id + 1})
+
 
 
 @order_operator.register
@@ -67,17 +78,15 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
             state.inStockItems[order_id].append(resp.idx)
         else:
             state.inStockItems.update({order_id: [resp.idx]})
-
+    # TODO: shouldn't this not just be done if in stock??
     if state.decrease_remaining_acks(order_id) == 0:
         state.unset_remaining_acks(order_id)
         if order_id in state.inStockItems:
             generate_order(ctx, checkoutRequest, state, order_id)
             state.checkouts.pop(order_id)
-
         else:
             # Do we need transaction marks, and egress messages?
             # Maybe that would just be a return of this workflow?
-
             state.clean_state(order_id)
 
     data["state"] = asdict(state)
@@ -177,7 +186,10 @@ def generate_order(
         )  # TODO create invoice with order_items for a specific seller here
 
         ctx.call_remote_async(
-            "seller", "invoice_issued", seller_id, (asdict(seller_invoice),)
+            "seller", 
+            "invoice_issued", 
+            seller_id, 
+            (asdict(seller_invoice),)
         )
 
     payment_invoice = InvoiceIssued(
@@ -190,7 +202,10 @@ def generate_order(
         checkoutRequest.instanceId,
     )  # TODO create invoice with order_items for a specific seller here
     ctx.call_remote_async(
-        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
+        "payment", 
+        "invoice_issued", 
+        ctx.key, 
+        (asdict(payment_invoice),)
     )
 
 
@@ -209,7 +224,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     order: Order = state.orders[order_id]
     order.orderStatus = OrderStatus.PAYMENT_PROCESSED
     order.updatedAt = now
-    ctx.put({"next_id": next_id, "state": state})
+    ctx.put({"next_id": next_id, "state": asdict(state)})
 
 
 @order_operator.register
@@ -240,9 +255,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     order.orderStatus = status
     if status is OrderStatus.DELIVERED:
         order.deliveredCustomerDate = notif.event_date
-
         # more logging to postgres
-
         state.clean_state(order_id)
 
 
@@ -250,3 +263,17 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 async def GetOrders(ctx: StatefulFunction):
     # have to check if any state exists
     return ctx.get()
+
+
+@order_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@order_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state

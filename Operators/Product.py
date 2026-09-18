@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import logging
 
 from Entities.Product import Product
@@ -16,9 +17,11 @@ class ProductDoesNotExist(Exception):
 class ProductAlreadyExists(Exception):
     pass
 
+class ProductReplaceError(Exception):
+    pass
 
 @product_operator.register
-async def create_product(ctx: StatefulFunction, product: Product) -> Product:
+async def create_product(ctx: StatefulFunction, product: dict) -> dict:
     state = ctx.get()
     if state is not None:
         raise ProductAlreadyExists(f"Error: Product with id {ctx.key} already exists")
@@ -26,24 +29,31 @@ async def create_product(ctx: StatefulFunction, product: Product) -> Product:
     return product
 
 @product_operator.register
-async def replace_product(ctx: StatefulFunction, product) -> Product:
+async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
-    
+
+    existingProduct: Product = Product(**state)
+    newProduct: Product = Product(**product)
+
+    if existingProduct.SellerId != newProduct.SellerId:
+        raise ProductReplaceError(f"Error: Cannot replace product with a different seller id")
+
     ctx.call_remote_async(
         function_name="on_product_update",
         operator_name="stock",
-        key=ctx.key,
-        params=(product['Version'],)
+        key=f"{newProduct.SellerId}:{ctx.key}",
+        params=(newProduct.Version,)
     )
 
-    ctx.put(product)
+    ctx.put(asdict(newProduct))
 
     return ctx.get()
 
+
 @product_operator.register
-async def update_product_price(ctx: StatefulFunction, new_price: float) -> Product:
+async def update_product_price(ctx: StatefulFunction, new_price: float) -> dict:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
@@ -55,14 +65,33 @@ async def update_product_price(ctx: StatefulFunction, new_price: float) -> Produ
         params=(new_price,)
     )
 
-    state['Price'] = new_price
-    ctx.put(state)
+    product: Product = Product(**state)
+    product.Price = new_price
+    
+    ctx.put(asdict(product))
 
     return ctx.get()
 
+
 @product_operator.register
-async def get_product(ctx: StatefulFunction) -> Product:
+async def get_product(ctx: StatefulFunction) -> dict:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
+    return state
+
+
+
+
+@product_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@product_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
     return state

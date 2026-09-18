@@ -20,7 +20,7 @@ class StockItem:
 
     def confirm_reservation(self, qty):
         self.qty_reserved -= qty
-        self.qty_available += qty
+        self.qty_available -= qty
 
     def cancel_reservation(self, qty):
         self.qty_reserved -= qty

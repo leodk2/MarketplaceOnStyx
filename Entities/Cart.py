@@ -12,3 +12,9 @@ class Cart:
     items: list[CartItem]
     instanceId: int
     divergencies: list[ProductStatus]
+
+    def __post_init__(self):
+        self.items = [
+            item if isinstance(item, CartItem) else CartItem(**item)
+            for item in self.items
+        ]

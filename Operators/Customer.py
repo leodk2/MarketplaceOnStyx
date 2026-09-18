@@ -20,10 +20,19 @@ class CustomerAlreadyExists(Exception):
 
 
 @customer_operator.register
-async def register_customer(ctx: StatefulFunction, customer: Customer):
+async def register_customer(ctx: StatefulFunction, customer: dict):
     if ctx.get() is not None:
         raise CustomerAlreadyExists("error: customer already exists")
-    ctx.put(customer)
+
+    newCustomer: Customer = Customer(**customer)
+
+    ctx.call_remote_async(
+        operator_name="cart",
+        key=newCustomer.Id,
+        function_name="create_cart"
+    )
+    
+    ctx.put(asdict(newCustomer))
     return ctx.key
 
 
@@ -51,7 +60,7 @@ async def payment_notification(ctx: StatefulFunction, notificationType_value):
             customer.FailedPaymentCount += 1
         case CustomerNotificationType.CHECKOUT_FAILED:
             customer.FailedPaymentCount += 1
-    ctx.put(customer)
+    ctx.put(asdict(customer))
 
 
 @customer_operator.register
@@ -63,4 +72,19 @@ async def handle_delivery_notification(ctx: StatefulFunction):
     else:
         customer = Customer(**state)
     customer.DeliveryCount += 1
-    ctx.put(customer)
+    ctx.put(asdict(customer))
+
+
+
+@customer_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@customer_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state

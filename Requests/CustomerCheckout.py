@@ -36,12 +36,27 @@ class CheckoutRequest:
     timestamp: datetime
     instanceId: str
 
+    def __post_init__(self):
+        if not isinstance(self.customerCheckout, CustomerCheckout):
+            object.__setattr__(
+                self, "customerCheckout", CustomerCheckout(**self.customerCheckout)
+            )
+        object.__setattr__(
+            self,
+            "items",
+            [item if isinstance(item, CartItem) else CartItem(**item) for item in self.items],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ReserveStockRequest:
     orderId: int
     cartItem: CartItem
     idx: int
+
+    def __post_init__(self):
+        if not isinstance(self.cartItem, CartItem):
+            object.__setattr__(self, "cartItem", CartItem(**self.cartItem))
 
 
 @dataclass(frozen=True)
@@ -62,6 +77,17 @@ class InvoiceIssued:
     issue_date: datetime
     total_invoice: float
     instance_id: str
+
+    def __post_init__(self):
+        if not isinstance(self.customer_checkout, CustomerCheckout):
+            object.__setattr__(
+                self, "customer_checkout", CustomerCheckout(**self.customer_checkout)
+            )
+        object.__setattr__(
+            self,
+            "items",
+            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+        )
 
 
 @dataclass(frozen=True)
@@ -91,6 +117,17 @@ class PaymentConfirmed:
     items: list[OrderItem]
     date: datetime
     instance_id: str
+
+    def __post_init__(self):
+        if not isinstance(self.customer_checkout, CustomerCheckout):
+            object.__setattr__(
+                self, "customer_checkout", CustomerCheckout(**self.customer_checkout)
+            )
+        object.__setattr__(
+            self,
+            "items",
+            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+        )
 
 
 @dataclass(frozen=True)

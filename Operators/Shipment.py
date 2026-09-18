@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import datetime
 
 from styx.common.operator import Operator
@@ -9,7 +10,7 @@ from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from States.ShipmentState import ShipmentState
 from Requests.DeliveryNotification import DeliveryNotification
 
-shipment_operator = Operator("shipment", 4)  # keyed by order_id
+shipment_operator = Operator("shipment")  # keyed by order_id
 
 class ShipmentDoesNotExist(Exception):
     pass
@@ -19,7 +20,8 @@ class ShipmentDoesNotExist(Exception):
 async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentConfirmed(**payment_dict)
     now = datetime.now()
-    shipment_id = ctx.get().get("next_id", 0) + 1
+    data = ctx.get()
+    shipment_id = (data.get("next_id", 1) if data is not None else 1)
     shipment = Shipment(
         shipment_id,
         payment.order_id,
@@ -55,10 +57,10 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
         packages.append(pkg)
         package_id += 1
 
-    state = ShipmentState(**(ctx.get().get("state", {})))
+    state = ShipmentState(**(data.get("state", {}) if data is not None else {}))
     state.shipment.update({shipment_id: shipment})
     state.packages.update({shipment_id: packages})
-    ctx.put({"next_id": shipment_id, "state": state})
+    ctx.put({"next_id": shipment_id + 1, "state": asdict(state)})
 
     notif = ShipmentNotification(
         payment.order_id,
@@ -73,14 +75,14 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
             "seller", 
             "shipment_notification", 
             seller_id, 
-            (notif,)
+            (asdict(notif),)
         )
 
     ctx.call_remote_async(
         "order", 
         "shipment_notification", 
         payment.customer_checkout.customerId, 
-        (notif,)
+        (asdict(notif),)
     )
     # TODO transaction mark/egress message?
 
@@ -121,7 +123,7 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
         "handle_delivery_notification",
         package.seller_id,
         (
-           DeliveryNotification(
+           asdict(DeliveryNotification(
                 order_id=package.order_id,
                 customer_id=shipment_obj.customer_id,
                 package_id=package.package_id,
@@ -130,7 +132,7 @@ async def deliver_package(ctx: StatefulFunction, package: Package, now: datetime
                 product_name=package.product_name,
                 package_status=PackageStatus.DELIVERED,
                 delivery_date=now
-            ),
+            )),
         )
     )
     ctx.call_remote_async(
@@ -148,13 +150,27 @@ async def deliver_order(ctx: StatefulFunction, shipment_obj: Shipment, shipment_
             "shipment_notification",
             shipment_obj.order_id,
             (
-                ShipmentNotification(
+                asdict(ShipmentNotification(
                     shipment_obj.order_id,
                     ShipmentStatus.CONCLUDED,
                     now,
                     shipment_obj.customer_id,
-                ),
+                )),
             )
         )
     
 
+
+
+@shipment_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@shipment_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state

@@ -17,7 +17,7 @@ from Requests.CustomerCheckout import (
 )
 from States.SellerState import OrderEntry, SellerCompositeState, SellerState
 
-seller_operator = Operator("seller", 4)
+seller_operator = Operator("seller")
 
 logger = getLogger(__name__)
 
@@ -31,14 +31,15 @@ async def register_seller(ctx: StatefulFunction, seller):
     if ctx.get() is not None:
         raise SellerExistsError("error: seller already exists")
     state = SellerCompositeState(seller, SellerState())
-    ctx.put(state)
+    ctx.put(asdict(state))
     return ctx.key
 
 
 @seller_operator.register
 async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     invoice = InvoiceIssued(**invoice_dict)
-    state = SellerCompositeState(**(ctx.get())).state
+    composite_state = SellerCompositeState(**(ctx.get()))
+    state = composite_state.state
 
     order_items = invoice.items
     seller_id = ctx.key
@@ -66,7 +67,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
         )
     order_entries.append(order_entry)
 
-    ctx.put(asdict(state))
+    ctx.put(asdict(composite_state))
 
 
 @seller_operator.register
@@ -166,3 +167,18 @@ async def get_dashboard(ctx: StatefulFunction):
         return asdict(dashboard)
 
     return {}
+
+
+
+@seller_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@seller_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state
