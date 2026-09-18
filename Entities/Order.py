@@ -51,6 +51,8 @@ class Order:
         totalInvoice: float,
         totalItems: float,
         data: str,
+        createdAt: datetime | None = None,
+        updatedAt: datetime | None = None,
     ):
 
         self.id = id
@@ -68,5 +70,5 @@ class Order:
         self.totalInvoice = totalInvoice
         self.totalItems = totalItems
         self.data = data
-        self.createdAt = datetime.now()
-        self.updatedAt = self.createdAt
+        self.createdAt = createdAt if createdAt is not None else datetime.now()
+        self.updatedAt = updatedAt if updatedAt is not None else self.createdAt

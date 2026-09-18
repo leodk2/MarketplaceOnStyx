@@ -15,7 +15,7 @@ from Requests.CustomerCheckout import (
     PaymentStockEvent,
 )
 
-payment_operator = Operator("payment", 4)  # keyed by order_id
+payment_operator = Operator("payment")  # keyed by order_id
 
 
 @payment_operator.register
@@ -84,7 +84,13 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
 
     for oi in invoice.items:
         stock_payment_event = PaymentStockEvent(oi.quantity, PaymentStatus.SUCCEEDED)
-        ctx.call_remote_async("stock", "stock_payment", (asdict(stock_payment_event),))
+        ctx.call_remote_async(
+            "stock", 
+            "stock_payment", 
+            f"{oi.sellerId}:{oi.productId}", 
+            (asdict(stock_payment_event),)
+        )
+
     seller_ids = (oi.sellerId for oi in invoice.items)
 
     seller_notification = PaymentNotification(
@@ -116,5 +122,25 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     )
 
     ctx.call_remote_async(
-        "shipment", "payment_confirmed", ctx.key, (payment_confirmed,)
-    )  # TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
+        "shipment",
+        "payment_confirmed",
+        ctx.key,
+        (asdict(payment_confirmed),),
+    )
+
+    #TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
+
+
+
+@payment_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@payment_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state

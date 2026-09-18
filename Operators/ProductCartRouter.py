@@ -19,7 +19,7 @@ class ProductCartRoutingDoesNotExist(Exception):
 async def route_price_update(ctx: StatefulFunction, new_price: float):
     state = ctx.get()
     if state is None:
-        raise ProductCartRoutingDoesNotExist(f"Error: No carts registered for product {ctx.key}")
+        return "No carts registered for product {ctx.key}"
 
     for cart_id in state["carts"]:
         ctx.call_remote_async(
@@ -33,7 +33,7 @@ async def route_price_update(ctx: StatefulFunction, new_price: float):
 
 
 @product_cart_router_operator.register
-async def register(ctx: StatefulFunction, cart_id):
+async def register(ctx: StatefulFunction, cart_id: int):
     state = ctx.get()
     if state is None:
         ctx.put({"carts": [cart_id]})
@@ -43,6 +43,25 @@ async def register(ctx: StatefulFunction, cart_id):
     return ctx.key
 
 
+@product_cart_router_operator.register
+async def unregister(ctx: StatefulFunction, cart_id: int):
+    state = ctx.get()
+    if state is None:
+        raise ProductCartRoutingDoesNotExist(f"Error: No carts registered for product {ctx.key}")
+    state["carts"].remove(cart_id)
+    ctx.put(state)
+    return ctx.key
 
 
-    
+@product_cart_router_operator.register
+async def get_all_state(ctx: StatefulFunction) -> dict:
+    return ctx.data
+
+
+@product_cart_router_operator.register
+async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
+    if state:
+        ctx.batch_insert(state)
+    else:
+        ctx.put(None)
+    return state
