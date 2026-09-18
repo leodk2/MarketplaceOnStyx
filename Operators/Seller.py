@@ -120,7 +120,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(asdict(state))
-        return ctx.key  # TODO what to return here?
+        return ctx.key  
 
     for entry in entries:
         if notif.shipment_status is ShipmentStatus.APPROVED:

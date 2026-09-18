@@ -78,7 +78,7 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
             state.inStockItems[order_id].append(resp.idx)
         else:
             state.inStockItems.update({order_id: [resp.idx]})
-    # TODO: shouldn't this not just be done if in stock??
+
     if state.decrease_remaining_acks(order_id) == 0:
         state.unset_remaining_acks(order_id)
         if order_id in state.inStockItems:
