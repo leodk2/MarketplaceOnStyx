@@ -28,17 +28,17 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     order_id = invoice.order_id
 
     seq: int = 1
-    is_credit_card: bool = customer_checkout.paymentType is PaymentType.CREDIT_CARD.name
+    is_credit_card: bool = customer_checkout.PaymentType is PaymentType.CREDIT_CARD.name
 
     order_payments: list[OrderPayment] = []
     card: OrderPaymentCard
 
-    if is_credit_card or (customer_checkout.paymentType is PaymentType.DEBIT_CARD.name):
+    if is_credit_card or (customer_checkout.PaymentType is PaymentType.DEBIT_CARD.name):
         card_payment_line = OrderPayment(
             order_id,
             seq,
             PaymentType.CREDIT_CARD if is_credit_card else PaymentType.DEBIT_CARD,
-            customer_checkout.installments,
+            customer_checkout.Installments,
             invoice.total_invoice,
             PaymentStatus.SUCCEEDED,
         )
@@ -47,14 +47,14 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
             order_id,
             seq,
             customer_checkout.cardNumber,
-            customer_checkout.cardHolderName,
-            customer_checkout.cardExpiration,
-            customer_checkout.cardBrand,
+            customer_checkout.CardHolderName,
+            customer_checkout.CardExpiration,
+            customer_checkout.CardBrand,
         )
         order_payments.append(card_payment_line)
         seq += 1
 
-    if invoice.customer_checkout.paymentType is PaymentType.BOLETO.name:
+    if invoice.customer_checkout.PaymentType is PaymentType.BOLETO.name:
         order_payments.append(
             OrderPayment(
                 order_id,
@@ -85,10 +85,10 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     for oi in invoice.items:
         stock_payment_event = PaymentStockEvent(oi.quantity, PaymentStatus.SUCCEEDED)
         ctx.call_remote_async(
-            "stock", 
-            "stock_payment", 
-            f"{oi.sellerId}:{oi.productId}", 
-            (asdict(stock_payment_event),)
+            "stock",
+            "stock_payment",
+            f"{oi.sellerId}:{oi.productId}",
+            (asdict(stock_payment_event),),
         )
 
     seller_ids = (oi.sellerId for oi in invoice.items)
@@ -128,8 +128,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
         (asdict(payment_confirmed),),
     )
 
-    #TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
-
+    # TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
 
 
 @payment_operator.register

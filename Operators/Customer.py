@@ -1,3 +1,4 @@
+from Entities.TransactionMark import TransactionMark
 import logging
 from dataclasses import asdict
 
@@ -27,11 +28,9 @@ async def register_customer(ctx: StatefulFunction, customer: dict):
     newCustomer: Customer = Customer(**customer)
 
     ctx.call_remote_async(
-        operator_name="cart",
-        key=newCustomer.Id,
-        function_name="create_cart"
+        operator_name="cart", key=newCustomer.id, function_name="create_cart"
     )
-    
+
     ctx.put(asdict(newCustomer))
     return ctx.key
 
@@ -55,11 +54,11 @@ async def payment_notification(ctx: StatefulFunction, notificationType_value):
 
     match notificationType:
         case CustomerNotificationType.PAYMENT_SUCCESS:
-            customer.SuccessPaymentCount += 1
+            customer.success_payment_count += 1
         case CustomerNotificationType.PAYMENT_FAILED:
-            customer.FailedPaymentCount += 1
+            customer.failed_payment_count += 1
         case CustomerNotificationType.CHECKOUT_FAILED:
-            customer.FailedPaymentCount += 1
+            customer.failed_payment_count += 1
     ctx.put(asdict(customer))
 
 
@@ -71,9 +70,8 @@ async def handle_delivery_notification(ctx: StatefulFunction):
         raise CustomerDoesNotExist()
     else:
         customer = Customer(**state)
-    customer.DeliveryCount += 1
+    customer.delivery_count += 1
     ctx.put(asdict(customer))
-
 
 
 @customer_operator.register

@@ -1,20 +1,22 @@
 import itertools
-from Entities.SellerDashboard import OrderSellerView, SellerDashboard
+import pickle
 from dataclasses import asdict
 from logging import getLogger
 
-from Requests.DeliveryNotification import DeliveryNotification
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 from Entities.Order import OrderStatus
 from Entities.Packages import PackageStatus
+from Entities.SellerDashboard import OrderSellerView, SellerDashboard
 from Entities.Shipment import ShipmentStatus
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import (
     InvoiceIssued,
     PaymentNotification,
     ShipmentNotification,
 )
+from Requests.DeliveryNotification import DeliveryNotification
 from States.SellerState import OrderEntry, SellerCompositeState, SellerState
 
 seller_operator = Operator("seller")
@@ -47,7 +49,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     order_entries: list[OrderEntry] = []
 
     state.order_entries.update(
-        {f"{invoice.customer_checkout.customerId}-{invoice.order_id}": order_entries}
+        {f"{invoice.customer_checkout.CustomerId}-{invoice.order_id}": order_entries}
     )
 
     for oi in order_items:
@@ -80,7 +82,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(state)
-        return ctx.key
+        return ctx.key  # TODO what to return here?
 
     for entry in entries:
         entry.order_status = OrderStatus.PAYMENT_PROCESSED
@@ -88,7 +90,9 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @seller_operator.register
-async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
+async def handle_delivery_notification(
+    ctx: StatefulFunction, notif_dict: dict, tid: str
+):
     state = SellerCompositeState(**(ctx.get()))
     notif = DeliveryNotification(**notif_dict)
     id = f"{notif.customer_id}-{notif.order_id}"
@@ -96,11 +100,13 @@ async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(asdict(state))
-        return ctx.key 
+        return ctx.key
 
-    target_entry = next((entry for entry in entries if entry.product_id == notif.product_id), None)
+    target_entry = next(
+        (entry for entry in entries if entry.product_id == notif.product_id), None
+    )
 
-    if (target_entry is not None):
+    if target_entry is not None:
         target_entry.delivery_status = notif.package_status
         target_entry.delivery_date = notif.delivery_date
         target_entry.package_id = notif.package_id
@@ -108,8 +114,6 @@ async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
     ctx.put(asdict(state))
 
 
-
-    
 @seller_operator.register
 async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerCompositeState(**(ctx.get()))
@@ -120,7 +124,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(asdict(state))
-        return ctx.key  
+        return ctx.key
 
     for entry in entries:
         if notif.shipment_status is ShipmentStatus.APPROVED:
@@ -139,16 +143,16 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 
 
 @seller_operator.register
-async def get_dashboard(ctx: StatefulFunction):
+async def get_dashboard(ctx: StatefulFunction, req):
     # call shipment to get notifications that is still ongoing
     # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
     # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
     # return those aggregations.
-    state = SellerCompositeState(**ctx.get()).state
-
+    state = SellerState(**ctx.get())
     order_entries = list(
         itertools.chain.from_iterable([oe for oe in state.order_entries.values()])
     )
+    mark: TransactionMark
     if len(state.order_entries) > 0:
         seller_view = OrderSellerView(
             ctx.key,
@@ -162,12 +166,25 @@ async def get_dashboard(ctx: StatefulFunction):
         )
 
         dashboard = SellerDashboard(seller_view, order_entries)
+        # where to write the data?
+        res = pickle.dumps(dashboard)
+        mark = TransactionMark(
+            req["tid"],
+            TransactionType.QUERY_DASHBOARD,
+            ctx.key,
+            MarkStatus.SUCCESS,
+            str(res),
+        )
+    else:
+        mark = TransactionMark(
+            req["tid"],
+            TransactionType.QUERY_DASHBOARD,
+            ctx.key,
+            MarkStatus.SUCCESS,
+            "seller",
+        )
 
-        # TODO where to write the data?
-        return asdict(dashboard)
-
-    return {}
-
+    return mark
 
 
 @seller_operator.register

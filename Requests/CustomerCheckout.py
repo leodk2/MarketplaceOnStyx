@@ -1,31 +1,31 @@
-from Entities.Shipment import ShipmentStatus
-from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 
 from Entities.CartItem import CartItem
 from Entities.ItemStatus import ItemStatus
 from Entities.OrderItem import OrderItem
 from Entities.PaymentType import PaymentStatus
+from Entities.Shipment import ShipmentStatus
 
 
 @dataclass(frozen=True)
 class CustomerCheckout:
-    customerId: int
-    firstName: str
-    lastName: str
-    street: str
-    complement: str
-    city: str
-    state: str
-    zipcode: str
-    paymentType: str
-    cardNumber: str
-    cardHolderName: str
-    cardExpiration: str
-    cardSecurityNumber: str
-    cardBrand: str
-    installments: int
+    CustomerId: int
+    FirstName: str
+    LastName: str
+    Street: str
+    Complement: str
+    City: str
+    State: str
+    ZipCode: str
+    PaymentType: str
+    CardNumber: str
+    CardHolderName: str
+    CardExpiration: str
+    CardSecurityNumber: str
+    CardBrand: str
+    Installments: int
     instanceId: str
 
 
@@ -44,7 +44,10 @@ class CheckoutRequest:
         object.__setattr__(
             self,
             "items",
-            [item if isinstance(item, CartItem) else CartItem(**item) for item in self.items],
+            [
+                item if isinstance(item, CartItem) else CartItem(**item)
+                for item in self.items
+            ],
         )
 
 
@@ -86,7 +89,10 @@ class InvoiceIssued:
         object.__setattr__(
             self,
             "items",
-            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+            [
+                item if isinstance(item, OrderItem) else OrderItem(**item)
+                for item in self.items
+            ],
         )
 
 
@@ -126,7 +132,10 @@ class PaymentConfirmed:
         object.__setattr__(
             self,
             "items",
-            [item if isinstance(item, OrderItem) else OrderItem(**item) for item in self.items],
+            [
+                item if isinstance(item, OrderItem) else OrderItem(**item)
+                for item in self.items
+            ],
         )
 
 
@@ -136,4 +145,3 @@ class ShipmentNotification:
     shipment_status: ShipmentStatus
     event_date: datetime
     customer_id: int
-

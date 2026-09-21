@@ -12,8 +12,12 @@ class StockItem:
     ytd: int
     data: str
     version: str
-    updated_at: datetime
-    created_at: datetime
+    updated_at: datetime | None = None
+    created_at: datetime | None = None
+
+    def __post_init__(self):
+        self.updated_at = datetime.now()
+        self.created_at = datetime.now()
 
     def reserve(self, qty: int):
         self.qty_reserved += qty

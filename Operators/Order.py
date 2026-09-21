@@ -11,6 +11,7 @@ from Entities.ItemStatus import ItemStatus
 from Entities.Order import Order, OrderStatus
 from Entities.OrderHistory import OrderHistory
 from Entities.OrderItem import OrderItem
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import (
     CheckoutRequest,
     InvoiceIssued,
@@ -21,6 +22,7 @@ from Requests.CustomerCheckout import (
     ShipmentStatus,
 )
 from States.OrderState import OrderState
+from TransactionMarkException import TransactionMarkException
 
 # keyed by customer id which  is the same as cart id
 order_operator = Operator("order")  # keyed by cart_id which is customer_id
@@ -41,7 +43,7 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     state: OrderState | None = None
     order_id = None
 
-    if data is None: # first order for this customer
+    if data is None:  # first order for this customer
         state = OrderState()
         order_id = 1
     else:
@@ -62,7 +64,6 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     state.checkouts.update({order_id: checkoutRequest})
     state.set_remaining_acks(order_id, len(checkoutRequest.items))
     ctx.put({"state": asdict(state), "next_id": order_id + 1})
-
 
 
 @order_operator.register
@@ -88,6 +89,19 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
             # Do we need transaction marks, and egress messages?
             # Maybe that would just be a return of this workflow?
             state.clean_state(order_id)
+
+            # I guess we need to raise an exception here to roll back changes?
+            # Or is it fine to just return a transaction mark and leave the state as is?
+            # This is what is done in statefun
+            raise TransactionMarkException(
+                TransactionMark(
+                    checkoutRequest.customerCheckout.instanceId,
+                    TransactionType.CUSTOMER_SESSION,
+                    checkoutRequest.customerCheckout.CustomerId,
+                    MarkStatus.NOT_ACCEPTED,
+                    "order",
+                )
+            )
 
     data["state"] = asdict(state)
     ctx.put(data)
@@ -126,7 +140,7 @@ def generate_order(
             total_item = 0
 
         totalPerItem.update({(item.sellerId, item.productId): total_item})
-    customer_id = checkoutRequest.customerCheckout.customerId
+    customer_id = checkoutRequest.customerCheckout.CustomerId
 
     invoice_number = f"{customer_id}-{now}-{order_id}"
     order: Order = Order(
@@ -186,10 +200,7 @@ def generate_order(
         )  # TODO create invoice with order_items for a specific seller here
 
         ctx.call_remote_async(
-            "seller", 
-            "invoice_issued", 
-            seller_id, 
-            (asdict(seller_invoice),)
+            "seller", "invoice_issued", seller_id, (asdict(seller_invoice),)
         )
 
     payment_invoice = InvoiceIssued(
@@ -202,10 +213,7 @@ def generate_order(
         checkoutRequest.instanceId,
     )  # TODO create invoice with order_items for a specific seller here
     ctx.call_remote_async(
-        "payment", 
-        "invoice_issued", 
-        ctx.key, 
-        (asdict(payment_invoice),)
+        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
     )
 
 
@@ -228,7 +236,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @order_operator.register
-async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: str):
     state = OrderState(**(ctx.get()["state"]))
     notif: ShipmentNotification = ShipmentNotification(**notif_dict)
 

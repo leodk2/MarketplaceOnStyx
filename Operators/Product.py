@@ -1,24 +1,31 @@
-from dataclasses import asdict
 import logging
-
-from Entities.Product import Product
+from dataclasses import asdict
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-logger = logging.Logger(__name__)
+from Entities.Product import Product
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
+from Requests.PriceUpdate import UpdatePriceEvent
+from TransactionMarkException import TransactionMarkException
+
+logger = logging.getLogger(__name__)
 
 OPERATOR_NAME = "product"
 product_operator = Operator(OPERATOR_NAME)
 
+
 class ProductDoesNotExist(Exception):
     pass
+
 
 class ProductAlreadyExists(Exception):
     pass
 
+
 class ProductReplaceError(Exception):
     pass
+
 
 @product_operator.register
 async def create_product(ctx: StatefulFunction, product: dict) -> dict:
@@ -27,6 +34,7 @@ async def create_product(ctx: StatefulFunction, product: dict) -> dict:
         raise ProductAlreadyExists(f"Error: Product with id {ctx.key} already exists")
     ctx.put(product)
     return product
+
 
 @product_operator.register
 async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
@@ -37,14 +45,16 @@ async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
     existingProduct: Product = Product(**state)
     newProduct: Product = Product(**product)
 
-    if existingProduct.SellerId != newProduct.SellerId:
-        raise ProductReplaceError(f"Error: Cannot replace product with a different seller id")
+    if existingProduct.seller_id != newProduct.seller_id:
+        raise ProductReplaceError(
+            f"Error: Cannot replace product with a different seller id"
+        )
 
     ctx.call_remote_async(
         function_name="on_product_update",
         operator_name="stock",
-        key=f"{newProduct.SellerId}:{ctx.key}",
-        params=(newProduct.Version,)
+        key=f"{newProduct.seller_id}:{ctx.key}",
+        params=(newProduct.version,),
     )
 
     ctx.put(asdict(newProduct))
@@ -53,24 +63,42 @@ async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
 
 
 @product_operator.register
-async def update_product_price(ctx: StatefulFunction, new_price: float) -> dict:
+async def update_product_price(
+    ctx: StatefulFunction, new_price_request: dict
+) -> TransactionMark:
+    new_price = UpdatePriceEvent(**new_price_request)
+
     state = ctx.get()
     if state is None:
-        raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
+        raise TransactionMarkException(
+            TransactionMark(
+                new_price.instanceId,
+                TransactionType.PRICE_UPDATE,
+                new_price.sellerId,
+                MarkStatus.ERROR,
+                "product",
+            )
+        )
 
     ctx.call_remote_async(
         operator_name="product_cart_router",
         function_name="route_price_update",
         key=ctx.key,
-        params=(new_price,)
+        params=(new_price,),
     )
 
     product: Product = Product(**state)
-    product.Price = new_price
-    
+    product.price = new_price.price
+
     ctx.put(asdict(product))
 
-    return ctx.get()
+    return TransactionMark(
+        new_price.instanceId,
+        TransactionType.PRICE_UPDATE,
+        new_price.sellerId,
+        MarkStatus.SUCCESS,
+        "product",
+    )
 
 
 @product_operator.register
@@ -79,8 +107,6 @@ async def get_product(ctx: StatefulFunction) -> dict:
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
     return state
-
-
 
 
 @product_operator.register
