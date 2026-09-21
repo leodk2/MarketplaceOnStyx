@@ -1,7 +1,8 @@
-from dataclasses import asdict
+from TransactionMarkException import TransactionMarkException
+from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 import logging
+from dataclasses import asdict
 from datetime import datetime
-
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
@@ -149,7 +150,13 @@ async def checkout(
     doSeal(ctx, cart)
     ctx.put(asdict(cart))
 
-    return customer_id
+    return TransactionMark(
+        customerCheckout.instanceId,
+        TransactionType.CUSTOMER_SESSION,
+        ctx.key,
+        MarkStatus.SUCCESS,
+        "cart",
+    )
 
 
 @cart_operator.register

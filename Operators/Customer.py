@@ -1,3 +1,4 @@
+from Entities.TransactionMark import TransactionMark
 import logging
 from dataclasses import asdict
 

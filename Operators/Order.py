@@ -265,13 +265,6 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: st
         order.deliveredCustomerDate = notif.event_date
         # more logging to postgres
         state.clean_state(order_id)
-    return TransactionMark(
-        tid,
-        TransactionType.UPDATE_DELIVERY,
-        ctx.key,
-        MarkStatus.SUCCESS,
-        "shipment",
-    )
 
 
 @order_operator.register

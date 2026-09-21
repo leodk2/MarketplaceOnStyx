@@ -32,7 +32,9 @@ async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_i
     response = ReserveStockResponse(
         item.orderId, cart_item.sellerId, cart_item.productId, status, item.idx
     )
-    ctx.call_remote_async("order", "try_reserve_response", caller_id, (asdict(response),))
+    ctx.call_remote_async(
+        "order", "try_reserve_response", caller_id, (asdict(response),)
+    )
 
 
 def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> ItemStatus:
@@ -58,21 +60,24 @@ class StockItemAlreadyExists(Exception):
 
 
 @stock_operator.register
-async def on_product_update(ctx: StatefulFunction, newVersion: str) -> dict:
+async def on_product_update(ctx: StatefulFunction, newVersion: str):
     state = ctx.get()
-    if state is None: 
-        raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
+    seller_id = int(ctx.key[: str(ctx.key).find(":")])
+    if state is None:
+        raise TransactionMarkException(
+            TransactionMark(
+                state["version"],
+                TransactionType.UPDATE_PRODUCT,
+                seller_id,
+                MarkStatus.SUCCESS,
+                "stock",
+            )
+        )
     stockitem: StockItem = StockItem(**state)
     stockitem.version = newVersion
     ctx.put(asdict(stockitem))
-    return TransactionMark(
-        state["version"],
-        TransactionType.UPDATE_PRODUCT,
-        seller_id,
-        MarkStatus.SUCCESS,
-        "stock",
-    )
-   
+    return ctx.key
+
 
 @stock_operator.register
 async def create_stock(ctx: StatefulFunction, stock_item: dict) -> dict:
@@ -94,6 +99,7 @@ async def get_stock(ctx: StatefulFunction) -> dict:
         )
     return state
 
+
 @stock_operator.register
 async def get_all_state(ctx: StatefulFunction) -> dict:
     return ctx.data
@@ -107,12 +113,15 @@ async def set_all_state(ctx: StatefulFunction, state: dict) -> dict:
         ctx.put(None)
     return state
 
+
 @stock_operator.register
 async def stock_payment(ctx: StatefulFunction, payment_dict: dict):
     payment = PaymentStockEvent(**payment_dict)
     state = ctx.get()
     if state is None:
-        raise StockItemDoesNotExist(f"Error: StockItem with id {ctx.key} does not exist")
+        raise StockItemDoesNotExist(
+            f"Error: StockItem with id {ctx.key} does not exist"
+        )
 
     stockItem: StockItem = StockItem(**state)
 

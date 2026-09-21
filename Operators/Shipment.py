@@ -84,13 +84,6 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
         payment.customer_checkout.CustomerId,
         (asdict(notif),),
     )
-    return TransactionMark(
-        payment.instance_id,
-        TransactionType.CUSTOMER_SESSION,
-        payment.customer_checkout.CustomerId,
-        MarkStatus.SUCCESS,
-        "shipment",
-    )
 
 
 @shipment_operator.register
@@ -113,6 +106,9 @@ async def deliver_shipment(ctx: StatefulFunction, tid: str):
         await deliver_order(ctx, shipment_obj, shipment_packages, now, tid)
 
     ctx.put({**state, "state": shipment_state})
+    return TransactionMark(
+        tid, TransactionType.UPDATE_DELIVERY, ctx.key, MarkStatus.SUCCESS, "shipment"
+    )
 
 
 def get_ten_oldest_unconcluded_shipments(shipment_state: ShipmentState):

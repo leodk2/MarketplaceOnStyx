@@ -1,6 +1,5 @@
-from TransactionMarkException import TransactionMarkException
-from dataclasses import asdict
 import logging
+from dataclasses import asdict
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
@@ -8,6 +7,7 @@ from styx.common.stateful_function import StatefulFunction
 from Entities.Product import Product
 from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.PriceUpdate import UpdatePriceEvent
+from TransactionMarkException import TransactionMarkException
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ async def update_product_price(
             TransactionMark(
                 new_price.instanceId,
                 TransactionType.PRICE_UPDATE,
-                new_price.seller_id,
+                new_price.sellerId,
                 MarkStatus.ERROR,
                 "product",
             )
@@ -95,7 +95,7 @@ async def update_product_price(
     return TransactionMark(
         new_price.instanceId,
         TransactionType.PRICE_UPDATE,
-        new_price.seller_id,
+        new_price.sellerId,
         MarkStatus.SUCCESS,
         "product",
     )
