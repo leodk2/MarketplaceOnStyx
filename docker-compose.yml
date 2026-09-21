@@ -103,11 +103,10 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_started
-    deploy:
-      replicas: 1
+    scale: 10
 
   # =========================================
-  # KEY/VALUE STORE (this project)
+  # ONLINE MARKETPLACE BENCHMARK (this project)
   # =========================================
   marketplace:
     build:
