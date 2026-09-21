@@ -6,11 +6,6 @@ from datetime import datetime
 from enum import Enum
 from importlib import import_module
 from pkgutil import iter_modules
-from dataclasses import asdict, dataclass, is_dataclass
-from datetime import datetime
-from enum import Enum
-from importlib import import_module
-from pkgutil import iter_modules
 from typing import cast
 
 from sanic import Blueprint, Request, Sanic, json, text
@@ -28,6 +23,7 @@ import Entities.Seller as seller_entity
 import Entities.StockItem as stock_item_entity
 import Requests
 import States
+import TransactionMarkException
 from Operators.Cart import cart_operator
 from Operators.Customer import customer_operator
 from Operators.Order import order_operator
@@ -35,13 +31,10 @@ from Operators.Payment import payment_operator
 from Operators.Product import product_operator
 from Operators.ProductCartRouter import product_cart_router_operator
 from Operators.Seller import seller_operator
-from Operators.Stock import stock_operator
-from Operators.Product import product_operator
-from Operators.ProductCartRouter import product_cart_router_operator
-from Operators.Seller import seller_operator
-from Operators.Stock import stock_operator
 from Operators.Shipment import shipment_operator
+from Operators.Stock import stock_operator
 from Requests.CustomerCheckout import CustomerCheckout
+from Requests.PriceUpdate import UpdatePriceEvent
 
 APP_NAME = "marketplaceonstyx"
 
@@ -131,9 +124,12 @@ async def submit_dataflow_graph(_, n_partitions: int):
         shipment_operator,
     )
 
+    modules = list(APPLICATION_MODULES)
+    modules.append(TransactionMarkException)
+
     await styx_client.submit_dataflow(
         g,
-        external_modules=APPLICATION_MODULES,
+        external_modules=tuple(modules),
     )
     return json({"Graph submitted": True})
 
@@ -151,10 +147,7 @@ async def add_to_cart(_, customer_id: int, body: cart_item_entity.CartItem):
 async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
     req = await styx_client.send_event(
-        cart_operator, 
-        customer_id, 
-        "checkout", 
-        (customer_id, body)
+        cart_operator, customer_id, "checkout", (customer_id, body)
     )
     res = cast(StyxResponse, await req.get())
     return create_response(res, "Failed to checkout customer " + str(customer_id))
@@ -162,11 +155,7 @@ async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
 @api.post("cart/<customer_id:int>/seal")
 async def seal_cart(_: Request, customer_id: int):
-    req = await styx_client.send_event(
-        cart_operator, 
-        customer_id, 
-        "seal"
-    )
+    req = await styx_client.send_event(cart_operator, customer_id, "seal")
     res = cast(StyxResponse, await req.get())
     return text(
         f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
@@ -178,7 +167,7 @@ async def seal_cart(_: Request, customer_id: int):
 async def create_customer(_, body: customer_entity.Customer):
     future = await styx_client.send_event(
         operator=customer_operator,
-        key=body.Id,
+        key=body.id,
         function="register_customer",
         params=(body,),
     )
@@ -195,7 +184,7 @@ async def create_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="create_product",
-        key=body.ProductId,
+        key=body.product_id,
         params=(body,),
     )
 
@@ -204,13 +193,13 @@ async def create_product(_, body: product_entity.Product):
 
 
 @api.patch("product")
-@openapi.body(product_entity.Product, validate=True)
-async def update_product_price(_, body: product_entity.Product):
+@openapi.body(UpdatePriceEvent, validate=True)
+async def update_product_price(_, body: UpdatePriceEvent):
     future = await styx_client.send_event(
         operator=product_operator,
         function="update_product_price",
-        key=body.ProductId,
-        params=(body.Price,),
+        key=body.productId,
+        params=(body.price,),
     )
 
     result: StyxResponse | None = await future.get()
@@ -229,7 +218,7 @@ async def replace_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="replace_product",
-        key=body.ProductId,
+        key=body.product_id,
         params=(body,),
     )
 
@@ -263,7 +252,7 @@ async def get_product(_, product_id: int):
 async def create_seller(_, body: seller_entity.Seller):
     future = await styx_client.send_event(
         operator=seller_operator,
-        key=body.Id,
+        key=body.id,
         function="register_seller",
         params=(body,),
     )
@@ -296,14 +285,8 @@ async def deliver_shipment(_, tid):
 
 
 @api.post("stock")
-@openapi.body(stock_item_entity.StockItem)
-async def create_stock(request: Request):
-    data = dict(request.json)
-    for field in ("created_at", "updated_at"):
-        if isinstance(data.get(field), str):
-            data[field] = datetime.fromisoformat(data[field])
-    body = stock_item_entity.StockItem(**data)
-
+@openapi.body(stock_item_entity.StockItem, validate=True)
+async def create_stock(request: Request, body: stock_item_entity.StockItem):
     future = await styx_client.send_event(
         operator=stock_operator,
         key=f"{body.seller_id}:{body.product_id}",
@@ -387,7 +370,7 @@ async def get_all_state(_):
     shipment_result: StyxResponse | None = await future.get()
     if shipment_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
-    
+
     future = await styx_client.send_event(
         operator=stock_operator, key="all", function="get_all_state"
     )
@@ -404,12 +387,10 @@ async def get_all_state(_):
         "product_cart_router": product_cart_router_result.response,
         "seller": seller_result.response,
         "shipment": shipment_result.response,
-        "stock": stock_result.response
+        "stock": stock_result.response,
     }
 
     return json(result)
-
-
 
 
 app.blueprint(api)

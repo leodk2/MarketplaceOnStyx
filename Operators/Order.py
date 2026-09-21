@@ -43,7 +43,7 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     state: OrderState | None = None
     order_id = None
 
-    if data is None: # first order for this customer
+    if data is None:  # first order for this customer
         state = OrderState()
         order_id = 1
     else:
@@ -64,7 +64,6 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     state.checkouts.update({order_id: checkoutRequest})
     state.set_remaining_acks(order_id, len(checkoutRequest.items))
     ctx.put({"state": asdict(state), "next_id": order_id + 1})
-
 
 
 @order_operator.register
@@ -98,7 +97,7 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
                 TransactionMark(
                     checkoutRequest.customerCheckout.instanceId,
                     TransactionType.CUSTOMER_SESSION,
-                    checkoutRequest.customerCheckout.customerId,
+                    checkoutRequest.customerCheckout.CustomerId,
                     MarkStatus.NOT_ACCEPTED,
                     "order",
                 )
@@ -141,7 +140,7 @@ def generate_order(
             total_item = 0
 
         totalPerItem.update({(item.sellerId, item.productId): total_item})
-    customer_id = checkoutRequest.customerCheckout.customerId
+    customer_id = checkoutRequest.customerCheckout.CustomerId
 
     invoice_number = f"{customer_id}-{now}-{order_id}"
     order: Order = Order(
@@ -201,10 +200,7 @@ def generate_order(
         )  # TODO create invoice with order_items for a specific seller here
 
         ctx.call_remote_async(
-            "seller", 
-            "invoice_issued", 
-            seller_id, 
-            (asdict(seller_invoice),)
+            "seller", "invoice_issued", seller_id, (asdict(seller_invoice),)
         )
 
     payment_invoice = InvoiceIssued(
@@ -217,10 +213,7 @@ def generate_order(
         checkoutRequest.instanceId,
     )  # TODO create invoice with order_items for a specific seller here
     ctx.call_remote_async(
-        "payment", 
-        "invoice_issued", 
-        ctx.key, 
-        (asdict(payment_invoice),)
+        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
     )
 
 
@@ -243,7 +236,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @order_operator.register
-async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: str):
     state = OrderState(**(ctx.get()["state"]))
     notif: ShipmentNotification = ShipmentNotification(**notif_dict)
 
@@ -272,6 +265,13 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
         order.deliveredCustomerDate = notif.event_date
         # more logging to postgres
         state.clean_state(order_id)
+    return TransactionMark(
+        tid,
+        TransactionType.UPDATE_DELIVERY,
+        ctx.key,
+        MarkStatus.SUCCESS,
+        "shipment",
+    )
 
 
 @order_operator.register

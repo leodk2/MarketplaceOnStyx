@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class Product:
-    SellerId: int
-    ProductId: int
-    Price: float
-    FreightValue: float
-    Version: str
-    Name: str = ""
-    Sku: str = ""
-    Category: str = ""
-    Description: str = ""
-    Status: str = "approved"
+    seller_id: int
+    product_id: int
+    price: float
+    freight_value: float
+    version: str
+    name: str = ""
+    sku: str = ""
+    category: str = ""
+    description: str = ""
+    status: str = "approved"

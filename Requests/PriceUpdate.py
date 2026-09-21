@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class UpdatePriceEvent:
-    seller_id: int
-    product_id: int
-    instance_id: str
+    sellerId: int
+    productId: int
     price: float
+    version: str
+    instanceId: str

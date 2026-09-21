@@ -49,7 +49,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     order_entries: list[OrderEntry] = []
 
     state.order_entries.update(
-        {f"{invoice.customer_checkout.customerId}-{invoice.order_id}": order_entries}
+        {f"{invoice.customer_checkout.CustomerId}-{invoice.order_id}": order_entries}
     )
 
     for oi in order_items:
@@ -122,7 +122,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
     if entries is None:
         state.state.messagesReorderError.add(id)
         ctx.put(asdict(state))
-        return ctx.key  
+        return ctx.key
 
     for entry in entries:
         if notif.shipment_status is ShipmentStatus.APPROVED:
