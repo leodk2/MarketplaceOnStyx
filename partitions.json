@@ -1,0 +1,11 @@
+{
+  "product": 1,
+  "cart": 1,
+  "stock": 1,
+  "product_cart_router": 1,
+  "payment": 1,
+  "order": 1,
+  "seller": 1,
+  "customer": 1,
+  "shipment": 1
+}
