@@ -120,6 +120,9 @@ services:
       - STYX_PORT=8888
       - KAFKA_URL=kafka1:19092
       - PYTHONUNBUFFERED=TRUE
+      - PARTITIONS_CONFIG_PATH=/app/partitions.json
+    volumes:
+      - ./partitions.json:/app/partitions.json:ro
     ports:
       - "3000:3000"
     depends_on:

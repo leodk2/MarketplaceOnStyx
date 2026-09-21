@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as json_lib
 import os
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
@@ -52,6 +53,22 @@ api = Blueprint("api", url_prefix="/api/v1")
 STYX_HOST: str = os.environ["STYX_HOST"]
 STYX_PORT: int = int(os.environ["STYX_PORT"])
 KAFKA_URL: str = os.environ["KAFKA_URL"]
+PARTITIONS_CONFIG_PATH: str | None = os.environ.get("PARTITIONS_CONFIG_PATH")
+DEFAULT_N_PARTITIONS: int = int(os.environ.get("DEFAULT_N_PARTITIONS", "1"))
+
+def load_partitions_config(path: str | None) -> dict[str, int]:
+    """Load a {operator_name: n_partitions} mapping from a JSON file.
+
+    Operators absent from the file fall back to the n_partitions given
+    to the /submit endpoint.
+    """
+    if not path:
+        return {}
+    with open(path, encoding="utf-8") as config_file:
+        return json_lib.load(config_file)
+
+
+OPERATOR_PARTITIONS: dict[str, int] = load_partitions_config(PARTITIONS_CONFIG_PATH)
 
 styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
 APPLICATION_MODULES = tuple(
@@ -92,37 +109,35 @@ def create_response(result: StyxResponse | None, failure_message: str):
     return json(jsonable(result.response))
 
 
-@api.post("/submit/<n_partitions:int>")
-async def submit_dataflow_graph(_, n_partitions: int):
-    n_partitions = int(n_partitions)
+ALL_OPERATORS = (
+    product_operator,
+    cart_operator,
+    stock_operator,
+    product_cart_router_operator,
+    payment_operator,
+    order_operator,
+    seller_operator,
+    customer_operator,
+    shipment_operator,
+)
+
+
+@app.before_server_start
+async def startup(_app: Sanic, _loop) -> None:
+    partition_counts = {
+        op.name: OPERATOR_PARTITIONS.get(op.name, DEFAULT_N_PARTITIONS) for op in ALL_OPERATORS
+    }
 
     g = StateflowGraph(
         APP_NAME,
         operator_state_backend=LocalStateBackend.DICT,
-        max_operator_parallelism=n_partitions,
+        max_operator_parallelism=max(partition_counts.values()),
     )
 
-    product_operator.set_n_partitions(n_partitions)
-    cart_operator.set_n_partitions(n_partitions)
-    stock_operator.set_n_partitions(n_partitions)
-    product_cart_router_operator.set_n_partitions(n_partitions)
-    payment_operator.set_n_partitions(n_partitions)
-    order_operator.set_n_partitions(n_partitions)
-    seller_operator.set_n_partitions(n_partitions)
-    customer_operator.set_n_partitions(n_partitions)
-    shipment_operator.set_n_partitions(n_partitions)
+    for op in ALL_OPERATORS:
+        op.set_n_partitions(partition_counts[op.name])
 
-    g.add_operators(
-        product_operator,
-        cart_operator,
-        stock_operator,
-        product_cart_router_operator,
-        payment_operator,
-        order_operator,
-        seller_operator,
-        customer_operator,
-        shipment_operator,
-    )
+    g.add_operators(*ALL_OPERATORS)
 
     modules = list(APPLICATION_MODULES)
     modules.append(TransactionMarkException)
@@ -131,7 +146,6 @@ async def submit_dataflow_graph(_, n_partitions: int):
         g,
         external_modules=tuple(modules),
     )
-    return json({"Graph submitted": True})
 
 
 @api.put("cart/<customer_id:int>/add")
