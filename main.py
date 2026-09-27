@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json as json_lib
+import logging
 import os
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
@@ -40,6 +41,9 @@ from Requests.PriceUpdate import UpdatePriceEvent
 APP_NAME = "marketplaceonstyx"
 
 app = Sanic(APP_NAME)
+
+for logger_name in ("sanic.root", "sanic.error", "sanic.access", "sanic.server", "sanic.websockets"):
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 app.config.SWAGGER_UI_CONFIGURATION = {
     "docExpansion": "list",  # or "none"
@@ -198,7 +202,7 @@ async def create_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="create_product",
-        key=body.product_id,
+        key=f"{body.seller_id}:{body.product_id}",
         params=(body,),
     )
 
@@ -212,8 +216,8 @@ async def update_product_price(_, body: UpdatePriceEvent):
     future = await styx_client.send_event(
         operator=product_operator,
         function="update_product_price",
-        key=body.productId,
-        params=(body.price,),
+        key=f"{body.sellerId}:{body.productId}",
+        params=(asdict(body),),
     )
 
     result: StyxResponse | None = await future.get()
@@ -232,7 +236,7 @@ async def replace_product(_, body: product_entity.Product):
     future = await styx_client.send_event(
         operator=product_operator,
         function="replace_product",
-        key=body.product_id,
+        key=f"{body.seller_id}:{body.product_id}",
         params=(body,),
     )
 
@@ -246,10 +250,10 @@ async def replace_product(_, body: product_entity.Product):
     return json(result.response)
 
 
-@api.get("product/<product_id:int>")
-async def get_product(_, product_id: int):
+@api.get("product/<seller_id:int>/<product_id:int>")
+async def get_product(_, seller_id: int, product_id: int):
     future = await styx_client.send_event(
-        operator=product_operator, key=product_id, function="get_product"
+        operator=product_operator, key=f"{seller_id}:{product_id}", function="get_product"
     )
     result: StyxResponse | None = await future.get()
     if result is None:

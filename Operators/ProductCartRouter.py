@@ -9,14 +9,14 @@ logger = logging.Logger(__name__)
 OPERATOR_NAME = "product_cart_router"
 product_cart_router_operator = Operator(OPERATOR_NAME)
 
-# the key to this operator is product_id
+# Composite key: seller_id:product_id.
 
 class ProductCartRoutingDoesNotExist(Exception):
     pass
 
 
 @product_cart_router_operator.register
-async def route_price_update(ctx: StatefulFunction, new_price: float):
+async def route_price_update(ctx: StatefulFunction, new_price: dict):
     state = ctx.get()
     if state is None:
         return "No carts registered for product {ctx.key}"

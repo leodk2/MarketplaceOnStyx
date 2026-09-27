@@ -11,6 +11,7 @@ from Entities.Cart import Cart
 from Entities.CartItem import CartItem
 from Entities.CartStatus import CartStatus
 from Requests.CustomerCheckout import CheckoutRequest, CustomerCheckout
+from Requests.PriceUpdate import UpdatePriceEvent
 
 logger = logging.getLogger(__name__)
 cart_operator = Operator("cart")
@@ -81,7 +82,7 @@ async def add_item(ctx: StatefulFunction, item: dict):
 
     ctx.call_remote_async(
         operator_name="product_cart_router",
-        key=cartItem.productId,
+        key=f"{cartItem.sellerId}:{cartItem.productId}",
         function_name="register",
         params=(ctx.key,),
     )
@@ -116,7 +117,7 @@ def doSeal(ctx: StatefulFunction, cart: Cart | None):
     for item in cart.items:
         ctx.call_remote_async(
             operator_name="product_cart_router",
-            key=item.productId,
+            key=f"{item.sellerId}:{item.productId}",
             function_name="unregister",
             params=(ctx.key,),
         )
@@ -168,7 +169,8 @@ async def get(ctx: StatefulFunction):
 
 
 @cart_operator.register
-async def update_cart_price(ctx: StatefulFunction, new_price: float):
+async def update_cart_price(ctx: StatefulFunction, new_price_request: dict):
+    new_price = UpdatePriceEvent(**new_price_request)
     state = ctx.get()
     if state is None:
         raise CartDoesNotExist(
@@ -178,7 +180,8 @@ async def update_cart_price(ctx: StatefulFunction, new_price: float):
     cart: Cart = Cart(**state)
 
     for item in cart.items:
-        item.unitPrice = new_price
+        if (item.sellerId, item.productId) == (new_price.sellerId, new_price.productId):
+            item.unitPrice = new_price.price
 
     ctx.put(asdict(cart))
 

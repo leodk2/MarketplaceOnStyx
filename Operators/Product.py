@@ -12,7 +12,9 @@ from TransactionMarkException import TransactionMarkException
 logger = logging.getLogger(__name__)
 
 OPERATOR_NAME = "product"
-product_operator = Operator(OPERATOR_NAME)
+product_operator = Operator(OPERATOR_NAME, composite_key_hash_params=(0, ":"))
+
+# Composite key: seller_id:product_id.
 
 
 class ProductDoesNotExist(Exception):
@@ -53,7 +55,7 @@ async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
     ctx.call_remote_async(
         function_name="on_product_update",
         operator_name="stock",
-        key=f"{newProduct.seller_id}:{ctx.key}",
+        key=ctx.key,
         params=(newProduct.version,),
     )
 
@@ -84,7 +86,7 @@ async def update_product_price(
         operator_name="product_cart_router",
         function_name="route_price_update",
         key=ctx.key,
-        params=(new_price,),
+        params=(asdict(new_price),),
     )
 
     product: Product = Product(**state)
