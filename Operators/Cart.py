@@ -113,7 +113,7 @@ async def seal(ctx: StatefulFunction):
 def doSeal(ctx: StatefulFunction, cart: Cart | None):
     if cart is None:
         raise CartDoesNotExist()
-    cart.status = CartStatus.OPEN
+    cart.status = CartStatus.CHECKOUT_SENT
     for item in cart.items:
         ctx.call_remote_async(
             operator_name="product_cart_router",
