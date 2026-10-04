@@ -39,18 +39,14 @@ async def create_product(ctx: StatefulFunction, product: dict) -> dict:
 
 
 @product_operator.register
-async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
+async def replace_product(
+    ctx: StatefulFunction, product_update: dict
+) -> TransactionMark:
     state = ctx.get()
     if state is None:
         raise ProductDoesNotExist(f"Error: Product with id {ctx.key} does not exist")
 
-    existingProduct: Product = Product(**state)
-    newProduct: Product = Product(**product)
-
-    if existingProduct.seller_id != newProduct.seller_id:
-        raise ProductReplaceError(
-            f"Error: Cannot replace product with a different seller id"
-        )
+    newProduct: Product = Product(**product_update)
 
     ctx.call_remote_async(
         function_name="on_product_update",
@@ -61,7 +57,13 @@ async def replace_product(ctx: StatefulFunction, product: dict) -> dict:
 
     ctx.put(asdict(newProduct))
 
-    return ctx.get()
+    return TransactionMark(
+        newProduct.version,
+        TransactionType.UPDATE_PRODUCT,
+        newProduct.seller_id,
+        MarkStatus.SUCCESS,
+        "product",
+    )
 
 
 @product_operator.register

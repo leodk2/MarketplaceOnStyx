@@ -42,7 +42,13 @@ APP_NAME = "marketplaceonstyx"
 
 app = Sanic(APP_NAME)
 
-for logger_name in ("sanic.root", "sanic.error", "sanic.access", "sanic.server", "sanic.websockets"):
+for logger_name in (
+    "sanic.root",
+    "sanic.error",
+    "sanic.access",
+    "sanic.server",
+    "sanic.websockets",
+):
     logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 app.config.SWAGGER_UI_CONFIGURATION = {
@@ -59,6 +65,7 @@ STYX_PORT: int = int(os.environ["STYX_PORT"])
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 PARTITIONS_CONFIG_PATH: str | None = os.environ.get("PARTITIONS_CONFIG_PATH")
 DEFAULT_N_PARTITIONS: int = int(os.environ.get("DEFAULT_N_PARTITIONS", "1"))
+
 
 def load_partitions_config(path: str | None) -> dict[str, int]:
     """Load a {operator_name: n_partitions} mapping from a JSON file.
@@ -129,7 +136,8 @@ ALL_OPERATORS = (
 @app.before_server_start
 async def startup(_app: Sanic, _loop) -> None:
     partition_counts = {
-        op.name: OPERATOR_PARTITIONS.get(op.name, DEFAULT_N_PARTITIONS) for op in ALL_OPERATORS
+        op.name: OPERATOR_PARTITIONS.get(op.name, DEFAULT_N_PARTITIONS)
+        for op in ALL_OPERATORS
     }
 
     g = StateflowGraph(
@@ -253,7 +261,9 @@ async def replace_product(_, body: product_entity.Product):
 @api.get("product/<seller_id:int>/<product_id:int>")
 async def get_product(_, seller_id: int, product_id: int):
     future = await styx_client.send_event(
-        operator=product_operator, key=f"{seller_id}:{product_id}", function="get_product"
+        operator=product_operator,
+        key=f"{seller_id}:{product_id}",
+        function="get_product",
     )
     result: StyxResponse | None = await future.get()
     if result is None:
@@ -278,24 +288,20 @@ async def create_seller(_, body: seller_entity.Seller):
     return create_response(result, "Failed to create seller")
 
 
-@api.get("seller/dashboard/<seller_id:int>")
-async def get_seller_dashboard(_, seller_id: int):
+@api.get("seller/dashboard/<seller_id:int>/<tid:str>")
+async def get_seller_dashboard(_, seller_id: int, tid: int):
     future = await styx_client.send_event(
-        seller_operator,
-        seller_id,
-        "get_dashboard",
+        seller_operator, seller_id, "get_dashboard", (tid,)
     )
     result: StyxResponse | None = await future.get()
 
     return create_response(result, "Could not get dashboard")
 
 
-@api.patch("shipment/<tid:int>")
+@api.patch("shipment/<tid:str>")
 async def deliver_shipment(_, tid):
     future = await styx_client.send_event(
-        shipment_operator,
-        tid,
-        "deliver_shipment",
+        operator=shipment_operator, key=tid, function="deliver_shipment", params=(tid,)
     )
     result: StyxResponse | None = await future.get()
 

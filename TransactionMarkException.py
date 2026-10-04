@@ -12,4 +12,4 @@ class TransactionMarkException(Exception):
         self.mark = mark
 
     def __str__(self):
-        return json.dumps(asdict(self.mark))
+        return json.dumps(asdict(self.mark), default=lambda e: e.value)

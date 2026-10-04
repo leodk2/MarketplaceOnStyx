@@ -1,15 +1,15 @@
+import logging
 
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-import logging
-
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 OPERATOR_NAME = "product_cart_router"
 product_cart_router_operator = Operator(OPERATOR_NAME)
 
 # Composite key: seller_id:product_id.
+
 
 class ProductCartRoutingDoesNotExist(Exception):
     pass
@@ -19,14 +19,14 @@ class ProductCartRoutingDoesNotExist(Exception):
 async def route_price_update(ctx: StatefulFunction, new_price: dict):
     state = ctx.get()
     if state is None:
-        return "No carts registered for product {ctx.key}"
+        return None
 
     for cart_id in state["carts"]:
         ctx.call_remote_async(
-            operator_name="cart", 
-            key=cart_id, 
+            operator_name="cart",
+            key=cart_id,
             function_name="update_cart_price",
-            params=(new_price,)
+            params=(new_price,),
         )
 
     return ctx.key
@@ -47,7 +47,9 @@ async def register(ctx: StatefulFunction, cart_id: int):
 async def unregister(ctx: StatefulFunction, cart_id: int):
     state = ctx.get()
     if state is None:
-        raise ProductCartRoutingDoesNotExist(f"Error: No carts registered for product {ctx.key}")
+        raise ProductCartRoutingDoesNotExist(
+            f"Error: No carts registered for product {ctx.key}"
+        )
     state["carts"].remove(cart_id)
     ctx.put(state)
     return ctx.key

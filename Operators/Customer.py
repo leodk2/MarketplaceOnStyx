@@ -39,7 +39,7 @@ async def register_customer(ctx: StatefulFunction, customer: dict):
 async def GetCustomer(ctx: StatefulFunction):
     state = ctx.get()
     if state is None:
-        raise CustomerDoesNotExist(f"Customer with {ctx.key} does not exist")
+        raise CustomerDoesNotExist(f"Error: Customer with id {ctx.key} does not exist")
     return Customer(**state)
 
 
@@ -49,7 +49,7 @@ async def payment_notification(ctx: StatefulFunction, notificationType_value):
     state = ctx.get()
 
     if state is None:
-        raise CustomerDoesNotExist()
+        raise CustomerDoesNotExist(f"Error: Customer with id {ctx.key} does not exist")
     customer = Customer(**state)
 
     match notificationType:
@@ -67,7 +67,7 @@ async def handle_delivery_notification(ctx: StatefulFunction):
     state = ctx.get()
     customer: Customer
     if state is None:
-        raise CustomerDoesNotExist()
+        raise CustomerDoesNotExist(f"Error: Customer with id {ctx.key} does not exist")
     else:
         customer = Customer(**state)
     customer.delivery_count += 1

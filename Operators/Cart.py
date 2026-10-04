@@ -1,5 +1,3 @@
-from TransactionMarkException import TransactionMarkException
-from Entities.TransactionMark import TransactionMark, TransactionType, MarkStatus
 import logging
 from dataclasses import asdict
 from datetime import datetime
@@ -10,6 +8,7 @@ from styx.common.stateful_function import StatefulFunction
 from Entities.Cart import Cart
 from Entities.CartItem import CartItem
 from Entities.CartStatus import CartStatus
+from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import CheckoutRequest, CustomerCheckout
 from Requests.PriceUpdate import UpdatePriceEvent
 
@@ -112,8 +111,7 @@ async def seal(ctx: StatefulFunction):
 
 def doSeal(ctx: StatefulFunction, cart: Cart | None):
     if cart is None:
-        raise CartDoesNotExist()
-    cart.status = CartStatus.CHECKOUT_SENT
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
     for item in cart.items:
         ctx.call_remote_async(
             operator_name="product_cart_router",
@@ -122,6 +120,7 @@ def doSeal(ctx: StatefulFunction, cart: Cart | None):
             params=(ctx.key,),
         )
     cart.items = []
+    cart.status = CartStatus.OPEN
 
 
 @cart_operator.register
@@ -129,14 +128,22 @@ async def checkout(
     ctx: StatefulFunction, customer_id: int, customerCheckout_dict: dict
 ):
     customerCheckout = CustomerCheckout(**customerCheckout_dict)
-    if customer_id is not customerCheckout.CustomerId:
-        raise CustomerIdMismatch()
+    if customer_id != customerCheckout.CustomerId:
+        raise CustomerIdMismatch(
+            f"Error: Customer id {customer_id} does not match checkout customer id {customerCheckout.CustomerId}"
+        )
     state = ctx.get()
     if state is None:
-        raise CartDoesNotExist()
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
     cart: Cart = Cart(**state)
     if cart.status is CartStatus.CHECKOUT_SENT:
-        raise CheckoutAlreadySent()
+        raise CheckoutAlreadySent(
+            f"Error: Cart with id {ctx.key} for customer {cart.customerId} has already checked out"
+        )
+
+    cart.status = CartStatus.CHECKOUT_SENT
+
+    ctx.put(asdict(cart))
 
     checkoutRequest = CheckoutRequest(
         customerCheckout=customerCheckout,
@@ -164,7 +171,7 @@ async def checkout(
 async def get(ctx: StatefulFunction):
     data = ctx.get()
     if data is None:
-        raise CartDoesNotExist()
+        raise CartDoesNotExist(f"Error: Cart with id {ctx.key} does not exist")
     return data
 
 

@@ -69,11 +69,12 @@ async def on_product_update(ctx: StatefulFunction, newVersion: str):
                 state["version"],
                 TransactionType.UPDATE_PRODUCT,
                 seller_id,
-                MarkStatus.SUCCESS,
+                MarkStatus.ERROR,
                 "stock",
             )
         )
     stockitem: StockItem = StockItem(**state)
+    stockitem.updated_at = datetime.now()
     stockitem.version = newVersion
     ctx.put(asdict(stockitem))
     return ctx.key

@@ -143,7 +143,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 
 
 @seller_operator.register
-async def get_dashboard(ctx: StatefulFunction, req):
+async def get_dashboard(ctx: StatefulFunction, tid):
     # call shipment to get notifications that is still ongoing
     # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
     # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
@@ -170,7 +170,7 @@ async def get_dashboard(ctx: StatefulFunction, req):
         # where to write the data?
         res = pickle.dumps(dashboard)
         mark = TransactionMark(
-            req["tid"],
+            tid,
             TransactionType.QUERY_DASHBOARD,
             ctx.key,
             MarkStatus.SUCCESS,
@@ -178,7 +178,7 @@ async def get_dashboard(ctx: StatefulFunction, req):
         )
     else:
         mark = TransactionMark(
-            req["tid"],
+            tid,
             TransactionType.QUERY_DASHBOARD,
             ctx.key,
             MarkStatus.SUCCESS,
