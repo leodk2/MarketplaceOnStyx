@@ -6,11 +6,6 @@ from itertools import chain, islice
 
 @dataclass
 class ShipmentState:
-    # # shipments per customer
-    # shipment: dict[int, Shipment] = field(default_factory=dict)
-    # # packages per customer
-    # packages: dict[int, list[Package]] = field(default_factory=dict)
-
     shipment: dict[int, Shipment] = field(default_factory=dict)
     packages: dict[int, list[Package]] = field(default_factory=dict)
 
@@ -26,7 +21,8 @@ class ShipmentState:
             for shipment_id, pkgs in self.packages.items()
         }
 
-    def get_ten_oldest_unconcluded_shipments(self) -> dict[int, int]:
+    def get_oldest_open_shipment_per_seller(self) -> dict[int, int]:
+        """Map seller_id -> the lowest shipment_id with a shipped package."""
         oldest: dict[int, int] = {}
 
         for p in chain.from_iterable(self.packages.values()):
@@ -41,21 +37,15 @@ class ShipmentState:
     def get_shipped_packages_by_shipment_id_and_seller_id(
         self, seller_id: int, shipment_id: int
     ) -> list[Package]:
-        return list(
-            filter(
-                lambda p: (
-                    p.seller_id == seller_id
-                    and p.package_status == PackageStatus.SHIPPED
-                ),
-                self.packages,
-            )
-        )
+        return [
+            p
+            for p in self.packages[shipment_id]
+            if p.seller_id == seller_id and p.package_status == PackageStatus.SHIPPED
+        ]
 
     def get_total_delivered_packages_for_shipment(self, shipment_id: int) -> int:
-        return len(
-            list(
-                filter(
-                    lambda p: p.package_status == PackageStatus.DELIVERED, self.packages
-                )
-            )
+        return sum(
+            1
+            for p in self.packages[shipment_id]
+            if p.package_status == PackageStatus.DELIVERED
         )

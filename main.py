@@ -34,6 +34,7 @@ from Operators.Product import product_operator
 from Operators.ProductCartRouter import product_cart_router_operator
 from Operators.Seller import seller_operator
 from Operators.Shipment import shipment_operator
+from Operators.ShipmentProxy import shipment_proxy_operator
 from Operators.Stock import stock_operator
 from Requests.CustomerCheckout import CustomerCheckout
 from Requests.PriceUpdate import UpdatePriceEvent
@@ -130,6 +131,7 @@ ALL_OPERATORS = (
     seller_operator,
     customer_operator,
     shipment_operator,
+    shipment_proxy_operator,
 )
 
 
@@ -172,9 +174,14 @@ async def add_to_cart(_, customer_id: int, body: cart_item_entity.CartItem):
 @openapi.body(CustomerCheckout, validate=True)
 async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
-    shipment_partition = int(body.CustomerId) % shipment_operator.n_partitions
     req = await styx_client.send_event(
-        cart_operator, customer_id, "checkout", (customer_id, body, shipment_partition)
+        cart_operator,
+        customer_id,
+        "checkout",
+        (
+            customer_id,
+            body,
+        ),
     )
     res = cast(StyxResponse, await req.get())
     return create_response(res, "Failed to checkout customer " + str(customer_id))
@@ -300,13 +307,16 @@ async def get_seller_dashboard(_, seller_id: int, tid: int):
 
 
 @api.patch("shipment/<tid:str>")
-async def deliver_shipment(_, tid):
+async def update_delivery(_, tid: str):
     future = await styx_client.send_event(
-        operator=shipment_operator, key=tid, function="deliver_shipment", params=(tid,)
+        operator=shipment_proxy_operator,
+        key=tid,
+        function="update_shipment",
+        params=(tid,),
     )
     result: StyxResponse | None = await future.get()
 
-    return create_response(result, "Could not deliver shipment")
+    return create_response(result, "Could not update delivery")
 
 
 @api.post("stock")

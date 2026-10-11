@@ -36,9 +36,7 @@ class OrderNotFoundException(Exception):
 
 # We should store a dictionary containing the next order_id and the order state
 @order_operator.register
-async def checkout_request(
-    ctx: StatefulFunction, checkoutRequest_dict: dict, shipment_partition: int
-):
+async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
     data: dict = ctx.get()
 
@@ -57,7 +55,7 @@ async def checkout_request(
             "stock",
             "attempt_reserve_stock",
             f"{item.sellerId}:{item.productId}",
-            (asdict(reservation_event), ctx.key, shipment_partition),
+            (asdict(reservation_event), ctx.key),
         )
 
     state.checkouts.update({order_id: checkoutRequest})
@@ -66,9 +64,7 @@ async def checkout_request(
 
 
 @order_operator.register
-async def try_reserve_response(
-    ctx: StatefulFunction, resp_dict: dict, shipment_partition: int
-):
+async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
     resp = ReserveStockResponse(**resp_dict)
     order_id = resp.order_id
     data: dict = ctx.get()
@@ -84,7 +80,7 @@ async def try_reserve_response(
     if state.decrease_remaining_acks(order_id) == 0:
         state.unset_remaining_acks(order_id)
         if order_id in state.inStockItems:
-            generate_order(ctx, checkoutRequest, state, order_id, shipment_partition)
+            generate_order(ctx, checkoutRequest, state, order_id)
             state.checkouts.pop(order_id)
         else:
             # Do we need transaction marks, and egress messages?
@@ -113,7 +109,6 @@ def generate_order(
     checkoutRequest: CheckoutRequest,
     order_state: OrderState,
     order_id: int,
-    shipment_partition: int,
 ):
     now = datetime.now()
     items_to_checkout: list[CartItem] = []
@@ -218,7 +213,7 @@ def generate_order(
         "payment",
         "invoice_issued",
         ctx.key,
-        (asdict(payment_invoice), shipment_partition),
+        (asdict(payment_invoice),),
     )
 
 
@@ -241,16 +236,19 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @order_operator.register
-async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: str):
-    state = OrderState(**(ctx.get()["state"]))
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+    data: dict = ctx.get()
+    state = OrderState(**(data["state"]))
     notif: ShipmentNotification = ShipmentNotification(**notif_dict)
 
     order_id = notif.order_id
     order = state.orders.get(order_id, None)
     if order is None:
-        raise OrderNotFoundException(
-            f"Error: order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
+        # statefun only logs this; raising would abort the whole delivery update
+        logger.error(
+            f"Order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
         )
+        return
 
     now = datetime.now()
 
@@ -270,6 +268,9 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: st
         order.deliveredCustomerDate = notif.event_date
         # more logging to postgres
         state.clean_state(order_id)
+
+    data["state"] = asdict(state)
+    ctx.put(data)
 
 
 @order_operator.register

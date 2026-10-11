@@ -7,6 +7,7 @@ from styx.common.stateful_function import StatefulFunction
 from Entities.CustomerNotificationType import CustomerNotificationType
 from Entities.OrderPayment import OrderPayment, OrderPaymentCard
 from Entities.PaymentType import PaymentStatus, PaymentType
+from Operators.Shipment import shipment_operator
 from Requests.CustomerCheckout import (
     CustomerCheckout,
     InvoiceIssued,
@@ -19,9 +20,7 @@ payment_operator = Operator("payment")  # keyed by order_id
 
 
 @payment_operator.register
-async def invoice_issued(
-    ctx: StatefulFunction, invoice_dict: dict, shipment_partition: int
-):
+async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     invoice = InvoiceIssued(**invoice_dict)
     customer_checkout: CustomerCheckout = invoice.customer_checkout
 
@@ -126,11 +125,9 @@ async def invoice_issued(
     ctx.call_remote_async(
         "shipment",
         "payment_confirmed",
-        shipment_partition,
+        customer_checkout.CustomerId % shipment_operator.n_partitions,
         (asdict(payment_confirmed),),
     )
-
-    # TODO in tstatefun, they use the number of partitions of the shipment function to get the id. Do we need to?
 
 
 @payment_operator.register

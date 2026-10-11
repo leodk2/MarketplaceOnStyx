@@ -128,7 +128,6 @@ async def checkout(
     ctx: StatefulFunction,
     customer_id: int,
     customerCheckout_dict: dict,
-    shipment_partition: int,
 ):
     customerCheckout = CustomerCheckout(**customerCheckout_dict)
     if customer_id != customerCheckout.CustomerId:
@@ -158,7 +157,7 @@ async def checkout(
         "order",
         "checkout_request",
         ctx.key,
-        (asdict(checkoutRequest), shipment_partition),
+        (asdict(checkoutRequest),),
     )
 
     doSeal(ctx, cart)
