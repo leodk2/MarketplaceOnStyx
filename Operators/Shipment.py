@@ -63,7 +63,12 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     state = ShipmentState(**(data.get("state", {}) if data is not None else {}))
     state.shipment.update({shipment_id: shipment})
     state.packages.update({shipment_id: packages})
-    ctx.put({"next_id": shipment_id + 1, "state": asdict(state)})
+    ctx.put(
+        {
+            "next_id": shipment_id + 1,
+            "state": asdict(state),
+        }
+    )
 
     notif = ShipmentNotification(
         payment.order_id,
@@ -93,31 +98,26 @@ async def deliver_shipment(ctx: StatefulFunction, tid: str):
         raise ShipmentDoesNotExist("Error: No shipments registered")
 
     shipment_state = ShipmentState(**(state.get("state", {})))
-    shipments_to_deliver = get_ten_oldest_unconcluded_shipments(
-        shipment_state
+    shipments_to_deliver = (
+        shipment_state.get_ten_oldest_unconcluded_shipments()
     )  # TODO: What shipments to deliver??
 
     now = datetime.now()
 
-    for shipment_obj in shipments_to_deliver:
-        shipment_packages = shipment_state.packages.get(shipment_obj.shipment_id, [])
-        for package in shipment_packages:
-            await deliver_package(ctx, package, now, shipment_obj, tid)
-        await deliver_order(ctx, shipment_obj, shipment_packages, now, tid)
+    for seller_id, shipment_id in shipments_to_deliver.items():
+        seller_packages = (
+            shipment_state.get_shipped_packages_by_shipment_id_and_seller_id(
+                seller_id, shipment_id
+            )
+        )
+        updatePackageDelivery(ctx, shipment_state, seller_packages, shipment_id)
+        #     await deliver_package(ctx, package, now, shipment_obj, tid)
+        # await deliver_order(ctx, shipment_obj, shipment_packages, now, tid)
 
     ctx.put({**state, "state": shipment_state})
     return TransactionMark(
         tid, TransactionType.UPDATE_DELIVERY, ctx.key, MarkStatus.SUCCESS, "shipment"
     )
-
-
-def get_ten_oldest_unconcluded_shipments(shipment_state: ShipmentState):
-    unconcluded_shipments = (
-        s
-        for s in shipment_state.shipment.values()
-        if s.status != ShipmentStatus.CONCLUDED
-    )
-    return sorted(unconcluded_shipments, key=lambda s: s.request_date)[:10]
 
 
 async def deliver_package(

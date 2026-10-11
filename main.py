@@ -172,8 +172,9 @@ async def add_to_cart(_, customer_id: int, body: cart_item_entity.CartItem):
 @openapi.body(CustomerCheckout, validate=True)
 async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
+    shipment_partition = int(body.CustomerId) % shipment_operator.n_partitions
     req = await styx_client.send_event(
-        cart_operator, customer_id, "checkout", (customer_id, body)
+        cart_operator, customer_id, "checkout", (customer_id, body, shipment_partition)
     )
     res = cast(StyxResponse, await req.get())
     return create_response(res, "Failed to checkout customer " + str(customer_id))

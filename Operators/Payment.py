@@ -19,7 +19,9 @@ payment_operator = Operator("payment")  # keyed by order_id
 
 
 @payment_operator.register
-async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
+async def invoice_issued(
+    ctx: StatefulFunction, invoice_dict: dict, shipment_partition: int
+):
     invoice = InvoiceIssued(**invoice_dict)
     customer_checkout: CustomerCheckout = invoice.customer_checkout
 
@@ -46,7 +48,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
         card = OrderPaymentCard(
             order_id,
             seq,
-            customer_checkout.cardNumber,
+            customer_checkout.CardNumber,
             customer_checkout.CardHolderName,
             customer_checkout.CardExpiration,
             customer_checkout.CardBrand,
@@ -124,7 +126,7 @@ async def invoice_issued(ctx: StatefulFunction, invoice_dict: dict):
     ctx.call_remote_async(
         "shipment",
         "payment_confirmed",
-        ctx.key,
+        shipment_partition,
         (asdict(payment_confirmed),),
     )
 

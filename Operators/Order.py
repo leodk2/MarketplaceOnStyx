@@ -36,12 +36,11 @@ class OrderNotFoundException(Exception):
 
 # We should store a dictionary containing the next order_id and the order state
 @order_operator.register
-async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
+async def checkout_request(
+    ctx: StatefulFunction, checkoutRequest_dict: dict, shipment_partition: int
+):
     checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
     data: dict = ctx.get()
-
-    state: OrderState | None = None
-    order_id = None
 
     if data is None:  # first order for this customer
         state = OrderState()
@@ -58,7 +57,7 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
             "stock",
             "attempt_reserve_stock",
             f"{item.sellerId}:{item.productId}",
-            (asdict(reservation_event), ctx.key),
+            (asdict(reservation_event), ctx.key, shipment_partition),
         )
 
     state.checkouts.update({order_id: checkoutRequest})
@@ -67,7 +66,9 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
 
 
 @order_operator.register
-async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
+async def try_reserve_response(
+    ctx: StatefulFunction, resp_dict: dict, shipment_partition: int
+):
     resp = ReserveStockResponse(**resp_dict)
     order_id = resp.order_id
     data: dict = ctx.get()
@@ -83,7 +84,7 @@ async def try_reserve_response(ctx: StatefulFunction, resp_dict: dict):
     if state.decrease_remaining_acks(order_id) == 0:
         state.unset_remaining_acks(order_id)
         if order_id in state.inStockItems:
-            generate_order(ctx, checkoutRequest, state, order_id)
+            generate_order(ctx, checkoutRequest, state, order_id, shipment_partition)
             state.checkouts.pop(order_id)
         else:
             # Do we need transaction marks, and egress messages?
@@ -112,6 +113,7 @@ def generate_order(
     checkoutRequest: CheckoutRequest,
     order_state: OrderState,
     order_id: int,
+    shipment_partition: int,
 ):
     now = datetime.now()
     items_to_checkout: list[CartItem] = []
@@ -211,9 +213,12 @@ def generate_order(
         now,
         order.totalInvoice,
         checkoutRequest.instanceId,
-    )  # TODO create invoice with order_items for a specific seller here
+    )
     ctx.call_remote_async(
-        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
+        "payment",
+        "invoice_issued",
+        ctx.key,
+        (asdict(payment_invoice), shipment_partition),
     )
 
 
