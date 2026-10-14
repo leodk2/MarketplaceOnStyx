@@ -7,5 +7,6 @@
   "order": 10,
   "seller": 10,
   "customer": 10,
-  "shipment": 10
+  "shipment": 10,
+  "shipment_proxy": 10
 }

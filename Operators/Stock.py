@@ -23,7 +23,11 @@ logger = getLogger(__name__)
 
 
 @stock_operator.register
-async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_id):
+async def attempt_reserve_stock(
+    ctx: StatefulFunction,
+    item_dict: dict,
+    caller_id,
+):
     item = ReserveStockRequest(**item_dict)
     cart_item: CartItem = item.cartItem
 
@@ -33,7 +37,10 @@ async def attempt_reserve_stock(ctx: StatefulFunction, item_dict: dict, caller_i
         item.orderId, cart_item.sellerId, cart_item.productId, status, item.idx
     )
     ctx.call_remote_async(
-        "order", "try_reserve_response", caller_id, (asdict(response),)
+        "order",
+        "try_reserve_response",
+        caller_id,
+        (asdict(response),),
     )
 
 

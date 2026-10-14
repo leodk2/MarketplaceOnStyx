@@ -90,9 +90,7 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @seller_operator.register
-async def handle_delivery_notification(
-    ctx: StatefulFunction, notif_dict: dict, tid: str
-):
+async def handle_delivery_notification(ctx: StatefulFunction, notif_dict: dict):
     state = SellerCompositeState(**(ctx.get()))
     notif = DeliveryNotification(**notif_dict)
     id = f"{notif.customer_id}-{notif.order_id}"

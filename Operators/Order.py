@@ -40,9 +40,6 @@ async def checkout_request(ctx: StatefulFunction, checkoutRequest_dict: dict):
     checkoutRequest: CheckoutRequest = CheckoutRequest(**checkoutRequest_dict)
     data: dict = ctx.get()
 
-    state: OrderState | None = None
-    order_id = None
-
     if data is None:  # first order for this customer
         state = OrderState()
         order_id = 1
@@ -211,9 +208,12 @@ def generate_order(
         now,
         order.totalInvoice,
         checkoutRequest.instanceId,
-    )  # TODO create invoice with order_items for a specific seller here
+    )
     ctx.call_remote_async(
-        "payment", "invoice_issued", ctx.key, (asdict(payment_invoice),)
+        "payment",
+        "invoice_issued",
+        ctx.key,
+        (asdict(payment_invoice),),
     )
 
 
@@ -236,16 +236,19 @@ async def payment_notification(ctx: StatefulFunction, payment_dict: dict):
 
 
 @order_operator.register
-async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: str):
-    state = OrderState(**(ctx.get()["state"]))
+async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
+    data: dict = ctx.get()
+    state = OrderState(**(data["state"]))
     notif: ShipmentNotification = ShipmentNotification(**notif_dict)
 
     order_id = notif.order_id
     order = state.orders.get(order_id, None)
     if order is None:
-        raise OrderNotFoundException(
-            f"Error: order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
+        # statefun only logs this; raising would abort the whole delivery update
+        logger.error(
+            f"Order {order_id} cannot be found to update to status in function {ctx.key}. Current state size is {len(state.orders)}"
         )
+        return
 
     now = datetime.now()
 
@@ -265,6 +268,9 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict, tid: st
         order.deliveredCustomerDate = notif.event_date
         # more logging to postgres
         state.clean_state(order_id)
+
+    data["state"] = asdict(state)
+    ctx.put(data)
 
 
 @order_operator.register

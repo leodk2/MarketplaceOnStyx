@@ -57,8 +57,9 @@ class OrderState:
         history.append(order_history)
 
     def clean_state(self, order_id: int):
-        self.checkouts.pop(order_id)
-        self.inStockItems.pop(order_id)
-        self.orderHistory.pop(order_id)
-        self.orders.pop(order_id)
-        self.orderItems.pop(order_id)
+        # checkouts are already removed once the order has been generated
+        self.checkouts.pop(order_id, None)
+        self.inStockItems.pop(order_id, None)
+        self.orderHistory.pop(order_id, None)
+        self.orders.pop(order_id, None)
+        self.orderItems.pop(order_id, None)

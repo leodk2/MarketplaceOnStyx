@@ -6,17 +6,12 @@ from styx.common.stateful_function import StatefulFunction
 
 from Entities.Packages import Package, PackageStatus
 from Entities.Shipment import Shipment, ShipmentStatus
-from Entities.TransactionMark import MarkStatus, TransactionMark, TransactionType
 from Requests.CustomerCheckout import PaymentConfirmed, ShipmentNotification
 from Requests.DeliveryNotification import DeliveryNotification
 from States.ShipmentState import ShipmentState
 
-shipment_operator = Operator("shipment")  # keyed by order_id
-# In statefun they have a proxy function for shipment
-
-
-class ShipmentDoesNotExist(Exception):
-    pass
+# keyed by customer_id % n_partitions, so every key is a whole partition
+shipment_operator = Operator("shipment")
 
 
 @shipment_operator.register
@@ -63,7 +58,12 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
     state = ShipmentState(**(data.get("state", {}) if data is not None else {}))
     state.shipment.update({shipment_id: shipment})
     state.packages.update({shipment_id: packages})
-    ctx.put({"next_id": shipment_id + 1, "state": asdict(state)})
+    ctx.put(
+        {
+            "next_id": shipment_id + 1,
+            "state": asdict(state),
+        }
+    )
 
     notif = ShipmentNotification(
         payment.order_id,
@@ -87,101 +87,89 @@ async def payment_confirmed(ctx: StatefulFunction, payment_dict: dict):
 
 
 @shipment_operator.register
-async def deliver_shipment(ctx: StatefulFunction, tid: str):
-    state = ctx.get()
-    if state is None:
-        raise ShipmentDoesNotExist("Error: No shipments registered")
+async def update_shipment(ctx: StatefulFunction, tid: str):
+    # Invoked by the shipment proxy once per shipment partition. For every
+    # seller, deliver the packages of its oldest shipment that is still open.
+    data = ctx.get()
+    if data is None:
+        # nothing has been shipped from this partition yet
+        return
 
-    shipment_state = ShipmentState(**(state.get("state", {})))
-    shipments_to_deliver = get_ten_oldest_unconcluded_shipments(
-        shipment_state
-    )  # TODO: What shipments to deliver??
-
+    state = ShipmentState(**data.get("state", {}))
     now = datetime.now()
 
-    for shipment_obj in shipments_to_deliver:
-        shipment_packages = shipment_state.packages.get(shipment_obj.shipment_id, [])
-        for package in shipment_packages:
-            await deliver_package(ctx, package, now, shipment_obj, tid)
-        await deliver_order(ctx, shipment_obj, shipment_packages, now, tid)
+    for seller_id, shipment_id in state.get_oldest_open_shipment_per_seller().items():
+        seller_packages = state.get_shipped_packages_by_shipment_id_and_seller_id(
+            seller_id, shipment_id
+        )
+        update_package_delivery(ctx, state, seller_packages, shipment_id, now)
 
-    ctx.put({**state, "state": shipment_state})
-    return TransactionMark(
-        tid, TransactionType.UPDATE_DELIVERY, ctx.key, MarkStatus.SUCCESS, "shipment"
-    )
+    ctx.put({**data, "state": asdict(state)})
 
 
-def get_ten_oldest_unconcluded_shipments(shipment_state: ShipmentState):
-    unconcluded_shipments = (
-        s
-        for s in shipment_state.shipment.values()
-        if s.status != ShipmentStatus.CONCLUDED
-    )
-    return sorted(unconcluded_shipments, key=lambda s: s.request_date)[:10]
-
-
-async def deliver_package(
+def update_package_delivery(
     ctx: StatefulFunction,
-    package: Package,
+    state: ShipmentState,
+    seller_packages: list[Package],
+    shipment_id: int,
     now: datetime,
-    shipment_obj: Shipment,
-    tid: str,
 ):
-    package.package_status = PackageStatus.DELIVERED
-    package.delivered_time = now
-    # ctx.call_remote_async(
-    #     "seller",
-    #     "handle_delivery_notification",
-    #     package.seller_id,
-    #     (
-    #         asdict(
-    #             DeliveryNotification(
-    #                 order_id=package.order_id,
-    #                 customer_id=shipment_obj.customer_id,
-    #                 package_id=package.package_id,
-    #                 seller_id=package.seller_id,
-    #                 product_id=package.product_id,
-    #                 product_name=package.product_name,
-    #                 package_status=PackageStatus.DELIVERED,
-    #                 delivery_date=now,
-    #             )
-    #         ),
-    #         tid,
-    #     ),
-    # )
-    # ctx.call_remote_async(
-    #     "customer", "handle_delivery_notification", shipment_obj.customer_id
-    # )
+    shipment = state.shipment[shipment_id]
+    count_delivered = state.get_total_delivered_packages_for_shipment(shipment_id)
 
+    for package in seller_packages:
+        package.package_status = PackageStatus.DELIVERED
+        package.delivered_time = now
 
-async def deliver_order(
-    ctx: StatefulFunction,
-    shipment_obj: Shipment,
-    shipment_packages: list,
-    now: datetime,
-    tid: str,
-):
-    if all(
-        package.package_status == PackageStatus.DELIVERED
-        for package in shipment_packages
-    ):
-        shipment_obj.status = ShipmentStatus.CONCLUDED
-        # ctx.call_remote_async(
-        #     "order",
-        #     "shipment_notification",
-        #     shipment_obj.order_id,
-        #     (
-        #         asdict(
-        #             ShipmentNotification(
-        #                 shipment_obj.order_id,
-        #                 ShipmentStatus.CONCLUDED,
-        #                 now,
-        #                 shipment_obj.customer_id,
-        #             )
-        #         ),
-        #         tid,
-        #     ),
-        # )
+        delivery_notification = DeliveryNotification(
+            order_id=package.order_id,
+            customer_id=shipment.customer_id,
+            package_id=package.package_id,
+            seller_id=package.seller_id,
+            product_id=package.product_id,
+            product_name=package.product_name,
+            package_status=PackageStatus.DELIVERED,
+            delivery_date=now,
+        )
+
+        ctx.call_remote_async(
+            "customer", "handle_delivery_notification", shipment.customer_id
+        )
+        ctx.call_remote_async(
+            "seller",
+            "handle_delivery_notification",
+            package.seller_id,
+            (asdict(delivery_notification),),
+        )
+
+    if shipment.status == ShipmentStatus.APPROVED:
+        shipment.status = ShipmentStatus.DELIVERY_IN_PROGRESS
+        notif = ShipmentNotification(
+            shipment.order_id, shipment.status, now, shipment.customer_id
+        )
+        ctx.call_remote_async(
+            "order", "shipment_notification", shipment.customer_id, (asdict(notif),)
+        )
+
+    if shipment.package_count == count_delivered + len(seller_packages):
+        shipment.status = ShipmentStatus.CONCLUDED
+        notif = ShipmentNotification(
+            shipment.order_id, shipment.status, now, shipment.customer_id
+        )
+
+        # Statefun only notifies the seller of this batch of packages
+        ctx.call_remote_async(
+            "seller",
+            "shipment_notification",
+            seller_packages[0].seller_id,
+            (asdict(notif),),
+        )
+        ctx.call_remote_async(
+            "order", "shipment_notification", shipment.customer_id, (asdict(notif),)
+        )
+
+        state.shipment.pop(shipment_id)
+        state.packages.pop(shipment_id)
 
 
 @shipment_operator.register
