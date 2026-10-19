@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-# styx-udocker.sh — run the Marketplace-on-Styx stack with udocker
-# (udocker equivalent of `docker compose up` for our docker-compose.yml)
+# compose.sh — run the Marketplace-on-Styx supporting services with udocker
+# (zookeeper, Kafka, RustFS, Styx coordinator and worker only)
 #
 # Usage:
-#   ./styx-udocker.sh setup   # pull/load images + create containers (once)
-#   ./styx-udocker.sh up      # start everything in the background
-#   ./styx-udocker.sh status  # show which services are running
-#   ./styx-udocker.sh logs [service]   # tail logs (default: all)
-#   ./styx-udocker.sh down    # stop everything
-#   ./styx-udocker.sh clean   # down + delete containers and data
+#   ./compose.sh setup   # pull images + create containers (once)
+#   ./compose.sh up      # start everything in the background
+#   ./compose.sh status  # show which services are running
+#   ./compose.sh logs [service]   # tail logs (default: all)
+#   ./compose.sh down    # stop everything
+#   ./compose.sh clean   # down + delete containers and data
 #
 # How this differs from docker compose:
 #   * udocker has no network namespaces: every container shares the job's
@@ -21,10 +21,7 @@
 #     network would collide. Instead we run ONE worker container with
 #     WORKER_THREADS=10. Each thread is a separate Styx worker process with its
 #     own ports and registers with the coordinator individually.
-#   * udocker can't build images. Build `marketplace` on a machine with Docker:
-#       docker build -t library/marketplaceonstyx:latest .
-#       docker save library/marketplaceonstyx:latest -o marketplace.tar
-#     and upload marketplace.tar next to this script.
+#   * The marketplace application is run separately; no marketplace image is needed.
 # =============================================================================
 set -euo pipefail
 
@@ -37,23 +34,20 @@ LOG_DIR="$STACK_DIR/logs"
 DATA_DIR="$STACK_DIR/data"
 
 N_WORKERS="${N_WORKERS:-10}"         # replaces `scale: 10`
-MARKETPLACE_TAR="${MARKETPLACE_TAR:-$STACK_DIR/marketplace.tar}"
-PARTITIONS_JSON="${PARTITIONS_JSON:-$STACK_DIR/partitions.json}"
 
 # udocker execution mode. P1 (proot) is the most compatible default.
 # F3 (fakechroot) avoids ptrace overhead and is noticeably faster, so for
-# benchmark runs try: EXECMODE_STYX=F3 ./styx-udocker.sh setup
+# benchmark runs try: EXECMODE_STYX=F3 ./compose.sh setup
 EXECMODE_INFRA="${EXECMODE_INFRA:-P1}"   # zookeeper, kafka, rustfs
-EXECMODE_STYX="${EXECMODE_STYX:-P1}"     # coordinator, worker, marketplace
+EXECMODE_STYX="${EXECMODE_STYX:-P1}"     # coordinator, worker
 
 IMG_ZOOKEEPER="confluentinc/cp-zookeeper:7.4.0"   # do not go above 7.4.0 (aiokafka)
 IMG_KAFKA="confluentinc/cp-kafka:7.4.0"
 IMG_RUSTFS="rustfs/rustfs:latest"
 IMG_COORDINATOR="ghcr.io/delftdata/styx-coordinator:latest"
 IMG_WORKER="ghcr.io/delftdata/styx-worker:latest"
-IMG_MARKETPLACE="library/marketplaceonstyx:latest"
 
-SERVICES=(zookeeper kafka1 rustfs coordinator worker marketplace)
+SERVICES=(zookeeper kafka1 rustfs coordinator worker)
 
 # ------------------------------- helpers ------------------------------------
 log()  { printf '\033[1;34m[styx]\033[0m %s\n' "$*"; }
@@ -104,7 +98,7 @@ start_bg() {    # name cmd...
 write_hosts() {
   mkdir -p "$RUN_DIR"
   cat > "$RUN_DIR/hosts" <<EOF
-127.0.0.1   localhost $(hostname) zookeeper kafka1 rustfs coordinator worker marketplace
+127.0.0.1   localhost $(hostname) zookeeper kafka1 rustfs coordinator worker
 ::1         localhost ip6-localhost ip6-loopback
 EOF
 }
@@ -112,7 +106,7 @@ EOF
 
 check_ports() {
   local busy=()
-  for p in 2181 9092 19092 9000 8888 8889 3000; do
+  for p in 2181 9092 19092 9000 8888 8889; do
     (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && busy+=("$p")
   done
   for ((i = 0; i < N_WORKERS; i++)); do
@@ -132,13 +126,6 @@ cmd_setup() {
     udocker pull "$img"
   done
 
-  if ! udocker images | grep -q "${IMG_MARKETPLACE%%:*}"; then
-    [[ -f "$MARKETPLACE_TAR" ]] || die "missing $MARKETPLACE_TAR — build it with:
-    docker build -t $IMG_MARKETPLACE . && docker save $IMG_MARKETPLACE -o marketplace.tar"
-    log "loading marketplace image from $MARKETPLACE_TAR"
-    udocker load -i "$MARKETPLACE_TAR"
-  fi
-
   create() {    # name image execmode
     if container_exists "$1"; then log "container $1 exists"; else
       log "creating container $1"
@@ -151,7 +138,6 @@ cmd_setup() {
   create rustfs      "$IMG_RUSTFS"      "$EXECMODE_INFRA"
   create coordinator "$IMG_COORDINATOR" "$EXECMODE_STYX"
   create worker      "$IMG_WORKER"      "$EXECMODE_STYX"
-  create marketplace "$IMG_MARKETPLACE" "$EXECMODE_STYX"
 
   log "setup done — now run: $0 up"
 }
@@ -160,7 +146,6 @@ cmd_up() {
   for s in "${SERVICES[@]}"; do
     container_exists "$s" || die "container '$s' missing — run '$0 setup' first"
   done
-  [[ -f "$PARTITIONS_JSON" ]] || die "missing $PARTITIONS_JSON"
   mkdir -p "$RUN_DIR" "$LOG_DIR" "$DATA_DIR/rustfs"
   check_ports
   write_hosts
@@ -223,25 +208,7 @@ cmd_up() {
     worker
   wait_port worker 5000 120
 
-  # --- marketplace (restart: unless-stopped) --------------------------------
-  # The coordinator can take ~60 s to become ready (S3 retry loop), so the
-  # app is wrapped in a restart loop, like compose's restart policy.
-  start_bg marketplace bash -c '
-    while true; do
-      udocker run -v "'"$RUN_DIR"'/hosts:/etc/hosts" \
-        -v "'"$PARTITIONS_JSON"':/app/partitions.json" \
-        -e STYX_HOST=coordinator \
-        -e STYX_PORT=8888 \
-        -e KAFKA_URL=kafka1:19092 \
-        -e PYTHONUNBUFFERED=TRUE \
-        -e PARTITIONS_CONFIG_PATH=/app/partitions.json \
-        marketplace
-      echo "[styx] marketplace exited with code $? — restarting in 5s"
-      sleep 5
-    done'
-  wait_port marketplace 3000 300
-
-  log "stack is up — marketplace on http://localhost:3000"
+  log "supporting services are up"
   log "logs: $LOG_DIR/  |  stop with: $0 down"
 }
 
