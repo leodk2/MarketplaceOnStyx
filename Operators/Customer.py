@@ -16,15 +16,8 @@ class CustomerDoesNotExist(Exception):
     pass
 
 
-class CustomerAlreadyExists(Exception):
-    pass
-
-
 @customer_operator.register
 async def register_customer(ctx: StatefulFunction, customer: dict):
-    if ctx.get() is not None:
-        raise CustomerAlreadyExists("error: customer already exists")
-
     newCustomer: Customer = Customer(**customer)
 
     ctx.call_remote_async(

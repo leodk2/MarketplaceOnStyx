@@ -24,14 +24,8 @@ seller_operator = Operator("seller")
 logger = getLogger(__name__)
 
 
-class SellerExistsError(Exception):
-    pass
-
-
 @seller_operator.register
 async def register_seller(ctx: StatefulFunction, seller):
-    if ctx.get() is not None:
-        raise SellerExistsError("error: seller already exists")
     state = SellerCompositeState(seller, SellerState())
     ctx.put(asdict(state))
     return ctx.key

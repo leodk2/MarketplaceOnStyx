@@ -28,10 +28,6 @@ class CartDoesNotExist(Exception):
     pass
 
 
-class CartAlreadyExists(Exception):
-    pass
-
-
 class CustomerIdMismatch(Exception):
     pass
 
@@ -42,11 +38,6 @@ class ItemAlreadyInCart(Exception):
 
 @cart_operator.register
 async def create_cart(ctx: StatefulFunction):
-    if ctx.get() is not None:
-        raise CartAlreadyExists(
-            f"Error: Cart for customer with id {ctx.key} already exists"
-        )
-
     cart: Cart = Cart(
         customerId=ctx.key,
         status=CartStatus.OPEN,

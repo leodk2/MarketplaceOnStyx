@@ -62,10 +62,6 @@ def get_stock_status(ctx: StatefulFunction, quantity: int, version: str) -> Item
     return ItemStatus.IN_STOCK
 
 
-class StockItemAlreadyExists(Exception):
-    pass
-
-
 @stock_operator.register
 async def on_product_update(ctx: StatefulFunction, newVersion: str):
     state = ctx.get()
@@ -89,11 +85,6 @@ async def on_product_update(ctx: StatefulFunction, newVersion: str):
 
 @stock_operator.register
 async def create_stock(ctx: StatefulFunction, stock_item: dict) -> dict:
-    state = ctx.get()
-    if state is not None:
-        raise StockItemAlreadyExists(
-            f"Error: StockItem with id {ctx.key} already exists"
-        )
     ctx.put(stock_item)
     return stock_item
 

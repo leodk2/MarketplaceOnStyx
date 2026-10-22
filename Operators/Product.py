@@ -21,19 +21,12 @@ class ProductDoesNotExist(Exception):
     pass
 
 
-class ProductAlreadyExists(Exception):
-    pass
-
-
 class ProductReplaceError(Exception):
     pass
 
 
 @product_operator.register
 async def create_product(ctx: StatefulFunction, product: dict) -> dict:
-    state = ctx.get()
-    if state is not None:
-        raise ProductAlreadyExists(f"Error: Product with id {ctx.key} already exists")
     ctx.put(product)
     return product
 
