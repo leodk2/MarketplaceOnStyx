@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json as json_lib
 import logging
 import os
@@ -66,6 +67,10 @@ STYX_PORT: int = int(os.environ["STYX_PORT"])
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 PARTITIONS_CONFIG_PATH: str | None = os.environ.get("PARTITIONS_CONFIG_PATH")
 DEFAULT_N_PARTITIONS: int = int(os.environ.get("DEFAULT_N_PARTITIONS", "1"))
+API_WORKERS: int = int(os.environ.get("API_WORKERS", "2"))
+STYX_STARTUP_TIMEOUT: float = float(os.environ.get("STYX_STARTUP_TIMEOUT", "60"))
+if API_WORKERS < 1:
+    raise ValueError("API_WORKERS must be at least 1")
 
 
 def load_partitions_config(path: str | None) -> dict[str, int]:
@@ -82,15 +87,11 @@ def load_partitions_config(path: str | None) -> dict[str, int]:
 
 OPERATOR_PARTITIONS: dict[str, int] = load_partitions_config(PARTITIONS_CONFIG_PATH)
 
-styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
 APPLICATION_MODULES = tuple(
     import_module(module.name)
     for package in (Entities, Requests, States)
     for module in iter_modules(package.__path__, f"{package.__name__}.")
 )
-
-
-app.add_task(styx_client.open(consume=True))
 
 
 def is_error(obj):
@@ -135,8 +136,9 @@ ALL_OPERATORS = (
 )
 
 
-@app.before_server_start
-async def startup(_app: Sanic, _loop) -> None:
+@app.main_process_start
+async def submit_graph(_app: Sanic) -> None:
+    """Submit once per Sanic launch, before any HTTP workers are spawned."""
     partition_counts = {
         op.name: OPERATOR_PARTITIONS.get(op.name, DEFAULT_N_PARTITIONS)
         for op in ALL_OPERATORS
@@ -156,25 +158,91 @@ async def startup(_app: Sanic, _loop) -> None:
     modules = list(APPLICATION_MODULES)
     modules.append(TransactionMarkException)
 
-    await styx_client.submit_dataflow(
-        g,
-        external_modules=tuple(modules),
+    client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
+    try:
+        async with asyncio.timeout(STYX_STARTUP_TIMEOUT):
+            await client.submit_dataflow(g, external_modules=tuple(modules))
+    finally:
+        # Submission only uses TCP; no Kafka producer or consumers were opened.
+        await client._networking_manager.close_all_connections()
+
+
+async def close_worker_client(client: AsyncStyxClient) -> None:
+    """Clean up even if open() failed partway through initialization.
+
+    The bundled client's close() assumes all resources exist and does not await
+    both cancelled tasks. Keep the compatibility handling local to this API.
+    """
+    tasks = [
+        task for task in (client._metadata_consumer_task, client._result_consumer_task)
+        if task is not None
+    ]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    resources = [
+        resource for resource in (
+            client._metadata_consumer,
+            client._result_consumer,
+            getattr(client, "_kafka_producer", None),
+        ) if resource is not None
+    ]
+    results = await asyncio.gather(
+        *(resource.stop() for resource in resources),
+        client._networking_manager.close_all_connections(),
+        return_exceptions=True,
     )
+    for result in results:
+        if isinstance(result, BaseException):
+            logging.getLogger(__name__).error("Styx client cleanup failed: %s", result)
+
+
+@app.before_server_start
+async def startup(app: Sanic) -> None:
+    # Each spawned worker creates its client on its own event loop. Keep the
+    # client's unique consumer group so responses reach their owning worker.
+    client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
+    app.ctx.styx_client = client
+    try:
+        async with asyncio.timeout(STYX_STARTUP_TIMEOUT):
+            await client.open(consume=True)
+            while True:
+                for task in (client._metadata_consumer_task, client._result_consumer_task):
+                    if task is not None and task.done():
+                        await task  # Propagate consumer startup errors immediately.
+                        raise RuntimeError("Styx consumer stopped during startup")
+                consumer = client._result_consumer
+                if client.graph_known_event.is_set() and consumer is not None:
+                    if consumer.assignment():
+                        break
+                await asyncio.sleep(0.05)
+    except BaseException:
+        await close_worker_client(client)
+        del app.ctx.styx_client
+        raise
+
+
+@app.after_server_stop
+async def shutdown(app: Sanic) -> None:
+    client = getattr(app.ctx, "styx_client", None)
+    if client is not None:
+        del app.ctx.styx_client
+        await close_worker_client(client)
 
 
 @api.put("cart/<customer_id:int>/add")
 @openapi.body(cart_item_entity.CartItem, validate=True)
-async def add_to_cart(_, customer_id: int, body: cart_item_entity.CartItem):
-    req = await styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
+async def add_to_cart(request: Request, customer_id: int, body: cart_item_entity.CartItem):
+    req = await request.app.ctx.styx_client.send_event(cart_operator, customer_id, "add_item", (body,))
     res = cast(StyxResponse, await req.get())
     return create_response(res, "Failed to add item to cart " + str(customer_id))
 
 
 @api.post("cart/<customer_id:int>/checkout")
 @openapi.body(CustomerCheckout, validate=True)
-async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
+async def checkout_cart(request: Request, body: CustomerCheckout, customer_id: int):
 
-    req = await styx_client.send_event(
+    req = await request.app.ctx.styx_client.send_event(
         cart_operator,
         customer_id,
         "checkout",
@@ -188,8 +256,8 @@ async def checkout_cart(_: Request, body: CustomerCheckout, customer_id: int):
 
 
 @api.post("cart/<customer_id:int>/seal")
-async def seal_cart(_: Request, customer_id: int):
-    req = await styx_client.send_event(cart_operator, customer_id, "seal")
+async def seal_cart(request: Request, customer_id: int):
+    req = await request.app.ctx.styx_client.send_event(cart_operator, customer_id, "seal")
     res = cast(StyxResponse, await req.get())
     return text(
         f"{res.request_id}, {res.in_timestamp}, {res.out_timestamp}, {res.styx_latency_ms}, {res.response}"
@@ -198,8 +266,8 @@ async def seal_cart(_: Request, customer_id: int):
 
 @api.post("customer")
 @openapi.body(customer_entity.Customer, validate=True)
-async def create_customer(_, body: customer_entity.Customer):
-    future = await styx_client.send_event(
+async def create_customer(request: Request, body: customer_entity.Customer):
+    future = await request.app.ctx.styx_client.send_event(
         operator=customer_operator,
         key=body.id,
         function="register_customer",
@@ -214,8 +282,8 @@ async def create_customer(_, body: customer_entity.Customer):
 
 @api.post("product")
 @openapi.body(product_entity.Product, validate=True)
-async def create_product(_, body: product_entity.Product):
-    future = await styx_client.send_event(
+async def create_product(request: Request, body: product_entity.Product):
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_operator,
         function="create_product",
         key=f"{body.seller_id}:{body.product_id}",
@@ -228,8 +296,8 @@ async def create_product(_, body: product_entity.Product):
 
 @api.patch("product")
 @openapi.body(UpdatePriceEvent, validate=True)
-async def update_product_price(_, body: UpdatePriceEvent):
-    future = await styx_client.send_event(
+async def update_product_price(request: Request, body: UpdatePriceEvent):
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_operator,
         function="update_product_price",
         key=f"{body.sellerId}:{body.productId}",
@@ -248,8 +316,8 @@ async def update_product_price(_, body: UpdatePriceEvent):
 
 @api.put("product")
 @openapi.body(product_entity.Product, validate=True)
-async def replace_product(_, body: product_entity.Product):
-    future = await styx_client.send_event(
+async def replace_product(request: Request, body: product_entity.Product):
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_operator,
         function="replace_product",
         key=f"{body.seller_id}:{body.product_id}",
@@ -267,8 +335,8 @@ async def replace_product(_, body: product_entity.Product):
 
 
 @api.get("product/<seller_id:int>/<product_id:int>")
-async def get_product(_, seller_id: int, product_id: int):
-    future = await styx_client.send_event(
+async def get_product(request: Request, seller_id: int, product_id: int):
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_operator,
         key=f"{seller_id}:{product_id}",
         function="get_product",
@@ -285,8 +353,8 @@ async def get_product(_, seller_id: int, product_id: int):
 
 @api.post("seller")
 @openapi.body(seller_entity.Seller, validate=True)
-async def create_seller(_, body: seller_entity.Seller):
-    future = await styx_client.send_event(
+async def create_seller(request: Request, body: seller_entity.Seller):
+    future = await request.app.ctx.styx_client.send_event(
         operator=seller_operator,
         key=body.id,
         function="register_seller",
@@ -297,8 +365,8 @@ async def create_seller(_, body: seller_entity.Seller):
 
 
 @api.get("seller/dashboard/<seller_id:int>/<tid:str>")
-async def get_seller_dashboard(_, seller_id: int, tid: int):
-    future = await styx_client.send_event(
+async def get_seller_dashboard(request: Request, seller_id: int, tid: int):
+    future = await request.app.ctx.styx_client.send_event(
         seller_operator, seller_id, "get_dashboard", (tid,)
     )
     result: StyxResponse | None = await future.get()
@@ -307,8 +375,8 @@ async def get_seller_dashboard(_, seller_id: int, tid: int):
 
 
 @api.patch("shipment/<tid:str>")
-async def update_delivery(_, tid: str):
-    future = await styx_client.send_event(
+async def update_delivery(request: Request, tid: str):
+    future = await request.app.ctx.styx_client.send_event(
         operator=shipment_proxy_operator,
         key=tid,
         function="update_shipment",
@@ -322,7 +390,7 @@ async def update_delivery(_, tid: str):
 @api.post("stock")
 @openapi.body(stock_item_entity.StockItem, validate=True)
 async def create_stock(request: Request, body: stock_item_entity.StockItem):
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=stock_operator,
         key=f"{body.seller_id}:{body.product_id}",
         function="create_stock",
@@ -333,8 +401,8 @@ async def create_stock(request: Request, body: stock_item_entity.StockItem):
 
 
 @api.get("stock/<seller_id:int>/<product_id:int>")
-async def get_stock(_, seller_id: int, product_id: int):
-    future = await styx_client.send_event(
+async def get_stock(request: Request, seller_id: int, product_id: int):
+    future = await request.app.ctx.styx_client.send_event(
         operator=stock_operator, key=f"{seller_id}:{product_id}", function="get_stock"
     )
     result: StyxResponse | None = await future.get()
@@ -349,64 +417,64 @@ async def get_stock(_, seller_id: int, product_id: int):
 
 # this only works with one partition, but it's useful for debugging and testing
 @api.get("allState")
-async def get_all_state(_):
-    future = await styx_client.send_event(
+async def get_all_state(request: Request):
+    future = await request.app.ctx.styx_client.send_event(
         operator=cart_operator, key="all", function="get_all_state"
     )
     cart_result: StyxResponse | None = await future.get()
     if cart_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=customer_operator, key="all", function="get_all_state"
     )
     customer_result: StyxResponse | None = await future.get()
     if customer_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=order_operator, key="all", function="get_all_state"
     )
     order_result: StyxResponse | None = await future.get()
     if order_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=payment_operator, key="all", function="get_all_state"
     )
     payment_result: StyxResponse | None = await future.get()
     if payment_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_operator, key="all", function="get_all_state"
     )
     product_result: StyxResponse | None = await future.get()
     if product_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=product_cart_router_operator, key="all", function="get_all_state"
     )
     product_cart_router_result: StyxResponse | None = await future.get()
     if product_cart_router_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=seller_operator, key="all", function="get_all_state"
     )
     seller_result: StyxResponse | None = await future.get()
     if seller_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=shipment_operator, key="all", function="get_all_state"
     )
     shipment_result: StyxResponse | None = await future.get()
     if shipment_result is None:
         return json({"Error": "Failed to get all state"}, status=500)
 
-    future = await styx_client.send_event(
+    future = await request.app.ctx.styx_client.send_event(
         operator=stock_operator, key="all", function="get_all_state"
     )
     stock_result: StyxResponse | None = await future.get()
@@ -432,4 +500,4 @@ app.blueprint(api)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=False, workers=API_WORKERS)
