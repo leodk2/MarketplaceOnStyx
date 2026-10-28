@@ -131,6 +131,7 @@ async def shipment_notification(ctx: StatefulFunction, notif_dict: dict):
 
     if notif.shipment_status is ShipmentStatus.CONCLUDED:
         state.state.order_entries.pop(id)
+    state.state.should_refresh_dashboard = True
     ctx.put(asdict(state))
 
 
@@ -140,12 +141,25 @@ async def get_dashboard(ctx: StatefulFunction, tid):
     # From there call payment to get payments on those ongoing orders that hasn't failed(somehow) [listing 1]
     # call a new function on the seller_dashboard operator, that does the aggregations. [mix of listing 2 and 3]
     # return those aggregations.
-    state = SellerCompositeState(**ctx.get()).state
+    seller_state = SellerCompositeState(**ctx.get())
+    state = seller_state.state
+
+    mark: TransactionMark
+    if not (state.should_refresh_dashboard or state.seller_dashboard == None):
+        dashboard = state.seller_dashboard
+        res = pickle.dumps(dashboard)
+        mark = TransactionMark(
+            tid,
+            TransactionType.QUERY_DASHBOARD,
+            ctx.key,
+            MarkStatus.SUCCESS,
+            str(res),
+        )
+        return mark
 
     order_entries = list(
         itertools.chain.from_iterable([oe for oe in state.order_entries.values()])
     )
-    mark: TransactionMark
     if len(state.order_entries) > 0:
         seller_view = OrderSellerView(
             ctx.key,
@@ -159,7 +173,10 @@ async def get_dashboard(ctx: StatefulFunction, tid):
         )
 
         dashboard = SellerDashboard(seller_view, order_entries)
-        # where to write the data?
+        seller_state.state.seller_dashboard = dashboard
+        seller_state.state.should_refresh_dashboard = False
+        ctx.put(asdict(seller_state))
+
         res = pickle.dumps(dashboard)
         mark = TransactionMark(
             tid,

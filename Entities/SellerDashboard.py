@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from States.SellerState import OrderEntry
+from States.OrderEntry import OrderEntry
 
 
 @dataclass(frozen=True, slots=True)
